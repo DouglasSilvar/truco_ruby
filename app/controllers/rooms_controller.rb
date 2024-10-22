@@ -98,6 +98,15 @@ class RoomsController < ApplicationController
         end
       end
       
+      def show
+        room = Room.find_by(uuid: params[:id]) # Usamos params[:id] pois o Rails usa esse padrão para rotas show
+    
+        if room
+          render json: room.as_json.merge(players_count: room.players.count)
+        else
+          render json: { error: "Room not found" }, status: :not_found
+        end
+      end
   
     private
   
