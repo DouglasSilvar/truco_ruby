@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2024_10_20_215309) do
+ActiveRecord::Schema[7.2].define(version: 2024_10_22_235934) do
   create_table "players", primary_key: "uuid", id: :string, force: :cascade do |t|
     t.string "name", null: false
     t.datetime "created_at", null: false
@@ -30,6 +30,10 @@ ActiveRecord::Schema[7.2].define(version: 2024_10_20_215309) do
     t.string "player_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.binary "chair_a", limit: 16
+    t.binary "chair_b", limit: 16
+    t.binary "chair_c", limit: 16
+    t.binary "chair_d", limit: 16
     t.index ["uuid"], name: "index_rooms_on_uuid", unique: true
   end
 
