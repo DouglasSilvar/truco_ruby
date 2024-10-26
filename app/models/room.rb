@@ -1,33 +1,33 @@
 class Room < ApplicationRecord
   before_create :generate_uuid
+  before_save :normalize_name
 
   belongs_to :owner, class_name: 'Player', foreign_key: 'player_id', primary_key: 'uuid'
   has_many :room_players
   has_many :players, through: :room_players
 
-  validates :name, presence: true, length: { maximum: 36 }
+  validates :name, presence: true, length: { maximum: 26 }
 
   def as_json(options = {})
     super(options.merge(include: { owner: { only: [:player_id, :name] } }))
   end
 
-
-  # Método para preencher aleatoriamente as cadeiras
-  def assign_random_chair(player_uuid)
+  # Método para preencher aleatoriamente as cadeiras com o nome do jogador
+  def assign_random_chair(player_name)
     available_chairs = %w[chair_a chair_b chair_c chair_d].select { |chair| self[chair].nil? }
 
     if available_chairs.any?
-      self[available_chairs.sample] = player_uuid
+      self[available_chairs.sample] = player_name
       save
     else
       raise "Room is full"
     end
   end
 
-  # Método para remover um player da cadeira
-  def remove_player_from_chair(player_uuid)
+  # Método para remover um jogador da cadeira usando o nome do jogador
+  def remove_player_from_chair(player_name)
     %w[chair_a chair_b chair_c chair_d].each do |chair|
-      if self[chair] == player_uuid
+      if self[chair] == player_name
         self[chair] = nil
         save
         break
@@ -39,5 +39,22 @@ class Room < ApplicationRecord
 
   def generate_uuid
     self.uuid = SecureRandom.uuid
+  end
+
+  def normalize_name
+    self.name = normalize_string(self.name)
+  end
+
+  def normalize_string(str)
+    # Remove acentos, substitui espaços por underscores e remove caracteres especiais
+    str.downcase
+       .gsub(/\s+/, '_')                      # Substitui espaços por underscore
+       .gsub(/[áàãâä]/, 'a')
+       .gsub(/[éèêë]/, 'e')
+       .gsub(/[íìîï]/, 'i')
+       .gsub(/[óòõôö]/, 'o')
+       .gsub(/[úùûü]/, 'u')
+       .gsub(/[ç]/, 'c')
+       .gsub(/[^a-z0-9_]/, '')                # Remove caracteres especiais
   end
 end
