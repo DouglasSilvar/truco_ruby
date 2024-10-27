@@ -1,5 +1,5 @@
 class RoomsController < ApplicationController
-
+  before_action :set_room, only: [:kick_player]
   skip_before_action :authenticate_player, only: [:index]
 
   def index
@@ -156,8 +156,55 @@ class RoomsController < ApplicationController
   
       render json: { message: "Player #{player_name} moved to #{chair_destination}" }, status: :ok
     end
+
+    def kick_player
+      player_name = params[:player_name]
+      owner_name = request.headers['name']
+      owner_uuid = request.headers['uuid']
+  
+      # Validação 1: Verificar se o jogador que fez a requisição existe
+      owner = Player.find_by(name: owner_name, uuid: owner_uuid)
+      if owner.nil?
+        render json: { error: 'Unauthorized: Player not found' }, status: :unauthorized
+        return
+      end
+  
+      # Validação 2: Verificar se a sala existe (já garantido pelo `set_room`)
+  
+      # Validação 3: Verificar se o jogador que requisitou é o dono da sala
+      unless @room.owner == owner
+        render json: { error: 'Unauthorized: You are not the owner of this room' }, status: :forbidden
+        return
+      end
+  
+      # Validação 4: Verificar se o nome do jogador a ser removido é válido
+      player_to_kick = Player.find_by(name: player_name)
+      if player_to_kick.nil?
+        render json: { error: 'Invalid player: Player does not exist' }, status: :not_found
+        return
+      end
+  
+      # Validação 5: Verificar se o jogador está na sala
+      unless @room.players.exists?(player_to_kick.id)
+        render json: { error: 'Player not found in the room' }, status: :unprocessable_entity
+        return
+      end
+  
+      # Remover o jogador da sala e da cadeira
+      RoomPlayer.find_by(room: @room, player: player_to_kick)&.destroy
+      @room.remove_player_from_chair(player_to_kick.name)
+  
+      render json: { message: "#{player_to_kick.name} has been kicked from the room", room: @room.as_json.merge(players_count: @room.players.count) }, status: :ok
+    end
   
     private
+
+    def set_room
+      @room = Room.find_by(uuid: params[:uuid])
+      if @room.nil?
+        render json: { error: 'Room not found' }, status: :not_found
+      end
+    end
 
     def find_player_chair(room, player_name)
       %w[chair_a chair_b chair_c chair_d].find { |chair| room[chair] == player_name }

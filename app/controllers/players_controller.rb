@@ -15,13 +15,14 @@ class PlayersController < ApplicationController
     end
   
     def create
-        player = Player.new(player_params)  # Apenas o 'name' será passado como parâmetro
-        if player.save
-          render json: { uuid: player.uuid, name: player.name }, status: :created
-        else
-          render json: { error: player.errors.full_messages }, status: :unprocessable_entity
-        end
+      player = Player.new(player_params)  # Cria o jogador com o nome
+      if player.save
+        # Aqui incluímos o UUID, pois é um caso especial (quando o jogador é criado)
+        render json: player.as_json_with_player_id, status: :created
+      else
+        render json: { error: player.errors.full_messages }, status: :unprocessable_entity
       end
+    end
 
       def validate_player
         player_name = request.headers['name']

@@ -9,8 +9,13 @@ class Room < ApplicationRecord
   validates :name, presence: true, length: { maximum: 26 }
 
   def as_json(options = {})
-    super(options.merge(include: { owner: { only: [:player_id, :name] } }))
-  end
+  super(options.merge(
+    except: [:player_id, :chair_a, :chair_b, :chair_c, :chair_d], # Exclui o player_id do proprietário
+    include: { 
+      owner: { only: [:name] } # Inclui apenas o nome do proprietário
+    }
+  ))
+end
 
   # Método para preencher aleatoriamente as cadeiras com o nome do jogador
   def assign_random_chair(player_name)

@@ -10,8 +10,14 @@ class Player < ApplicationRecord
   has_many :room_players
   has_many :rooms, through: :room_players
 
+  # Definir a serialização padrão sem incluir o player_id
   def as_json(options = {})
-    super(options.merge(except: [:uuid], methods: [:player_id]))
+    super(options.merge(except: [:uuid]))  # Exclui o UUID (player_id) por padrão
+  end
+
+  # Método personalizado para incluir o player_id apenas onde for necessário
+  def as_json_with_player_id(options = {})
+    { name: name, player_id: player_id }  # Retorna apenas o nome e o player_id
   end
 
   def player_id
