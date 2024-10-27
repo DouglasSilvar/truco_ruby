@@ -1,5 +1,6 @@
 Rails.application.routes.draw do
   resources :players, only: [:index,:create]
+  get 'players/valid', to: 'players#validate_player'
   
   resources :rooms, only: [:index, :create, :show]
   post 'rooms/:uuid/join', to: 'rooms#join_room'

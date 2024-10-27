@@ -22,6 +22,22 @@ class PlayersController < ApplicationController
           render json: { error: player.errors.full_messages }, status: :unprocessable_entity
         end
       end
+
+      def validate_player
+        player_name = request.headers['name']
+        player_uuid = request.headers['uuid']
+      
+        if player_name.present? && player_uuid.present?
+          player = Player.find_by(name: player_name, uuid: player_uuid)
+          if player
+            head :ok  # Retorna 200 OK sem body
+          else
+            head :not_found  # Retorna 404 Not Found
+          end
+        else
+          head :bad_request  # Retorna 400 Bad Request se os headers estiverem faltando
+        end
+      end
   
     private
   
