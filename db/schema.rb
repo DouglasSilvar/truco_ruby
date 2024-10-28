@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2024_10_26_012136) do
+ActiveRecord::Schema[7.2].define(version: 2024_10_28_011150) do
   create_table "players", primary_key: "uuid", id: :string, force: :cascade do |t|
     t.string "name", null: false
     t.datetime "created_at", null: false
@@ -24,6 +24,7 @@ ActiveRecord::Schema[7.2].define(version: 2024_10_26_012136) do
     t.string "player_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.boolean "kick", default: false
   end
 
   create_table "rooms", primary_key: "uuid", id: :string, force: :cascade do |t|
@@ -35,6 +36,7 @@ ActiveRecord::Schema[7.2].define(version: 2024_10_26_012136) do
     t.string "chair_b"
     t.string "chair_c"
     t.string "chair_d"
+    t.string "password", limit: 4
     t.index ["uuid"], name: "index_rooms_on_uuid", unique: true
   end
 

@@ -8,14 +8,15 @@ class Room < ApplicationRecord
 
   validates :name, presence: true, length: { maximum: 26 }
 
+  # Modificando o as_json para excluir o campo password e adicionar o campo protected
   def as_json(options = {})
-  super(options.merge(
-    except: [:player_id, :chair_a, :chair_b, :chair_c, :chair_d], # Exclui o player_id do proprietário
-    include: { 
-      owner: { only: [:name] } # Inclui apenas o nome do proprietário
-    }
-  ))
-end
+    super(options.merge(
+      except: [:player_id, :chair_a, :chair_b, :chair_c, :chair_d, :password], # Exclui o player_id, cadeiras e a senha
+      include: { 
+        owner: { only: [:name] } # Inclui apenas o nome do proprietário
+      }
+    )).merge(protected: password.present?) # Adiciona o campo protected
+  end
 
   # Método para preencher aleatoriamente as cadeiras com o nome do jogador
   def assign_random_chair(player_name)
