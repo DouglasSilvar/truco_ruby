@@ -7,4 +7,5 @@ Rails.application.routes.draw do
   post 'rooms/:uuid/leave', to: 'rooms#leave_room'
   post 'rooms/:uuid/changechair', to: 'rooms#change_chair'
   post 'rooms/:uuid/kick', to: 'rooms#kick_player'
+  post 'rooms/:uuid/ready/:boolean', to: 'rooms#update_ready_status'
 end

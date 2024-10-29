@@ -7,7 +7,7 @@ class RoomsController < ApplicationController
 
     # Adicionar a contagem de jogadores em cada sala
     rooms_with_players_count = rooms.map do |room|
-      room.as_json.merge(players_count: room.players.count)
+      room.as_json.merge(players_count: room.room_players.where(kick: false).count)
     end
 
     render json: {
@@ -44,7 +44,7 @@ class RoomsController < ApplicationController
         # Colocar automaticamente o criador na cadeira A (usando o nome)
         room.update(chair_a: player.name)
     
-        render json: room.as_json.merge(players_count: room.players.count), status: :created
+        render json: room.as_json.merge(players_count: room.room_players.where(kick: false).count), status: :created
       else
         render json: room.errors, status: :unprocessable_entity
       end
@@ -77,7 +77,7 @@ class RoomsController < ApplicationController
             room_player.update(kick: false)
             # Atribuir uma cadeira aleatória corretamente usando o nome do jogador
             room.assign_random_chair(player.name)
-            render json: { message: "Player rejoined the room after being kicked", room: room.as_json.merge(players_count: room.players.count) }, status: :ok
+            render json: { message: "Player rejoined the room after being kicked", room: room.as_json.merge(players_count: room.room_players.where(kick: false).count) }, status: :ok
           else
             render json: { error: "Player is already in the room" }, status: :ok
           end
@@ -90,7 +90,7 @@ class RoomsController < ApplicationController
             # Atribuir uma cadeira aleatória corretamente usando o nome do jogador
             room.assign_random_chair(player.name)
   
-            render json: { message: "Player joined the room", room: room.as_json.merge(players_count: room.players.count) }, status: :ok
+            render json: { message: "Player joined the room", room: room.as_json.merge(players_count: room.room_players.where(kick: false).count) }, status: :ok
           else
             render json: { error: "Room is full" }, status: :unprocessable_entity
           end
@@ -122,7 +122,7 @@ class RoomsController < ApplicationController
             # Remover o jogador da cadeira usando o nome
             room.remove_player_from_chair(player.name)
     
-            render json: { message: "Player left the room", room: room.as_json.merge(players_count: room.players.count) }, status: :ok
+            render json: { message: "Player left the room", room: room.as_json.merge(players_count: room.room_players.where(kick: false).count) }, status: :ok
           end
         else
           render json: { error: "Player is not in the room" }, status: :unprocessable_entity
@@ -134,50 +134,67 @@ class RoomsController < ApplicationController
     
     def show
       room = Room.find_by(uuid: params[:id])
-      
+    
       if room
         # Recupera o jogador que fez a requisição a partir dos headers
         player_uuid = request.headers['uuid']
         player = Player.find_by(uuid: player_uuid)
-        
+    
         chairs = {
           chair_a: room.chair_a,
           chair_b: room.chair_b,
           chair_c: room.chair_c,
           chair_d: room.chair_d
         }
-        
+    
+        # Buscar todos os jogadores que estão prontos (ready: true) na sala
+        ready_players = room.room_players.includes(:player).where(ready: true, kick: false).map do |room_player|
+          { player: room_player.player.name }
+        end
+    
+        # Garantir que o owner da sala está sempre com ready = true
+        owner_player = room.owner
+        ready_players << { player: owner_player.name } unless ready_players.any? { |p| p[:player] == owner_player.name }
+    
+        # Ajustar a contagem de jogadores excluindo os kickados
+        players_count = room.room_players.where(kick: false).count
+    
         # Se o jogador foi encontrado, verificar se está na sala
         if player
           room_player = RoomPlayer.find_by(room: room, player: player)
     
           if room_player
-            # Jogador está na sala, incluir status de 'kick'
+            # Jogador está na sala, incluir status de 'kick' e jogadores prontos
             render json: room.as_json.merge(
-              players_count: room.players.count,
+              players_count: players_count,  # Inclui a contagem sem os kickados
               chairs: chairs,
-              player_kick_status: room_player.kick  # Inclui o status do jogador na resposta
+              player_kick_status: room_player.kick,  # Inclui o status do jogador na resposta
+              ready: ready_players  # Inclui a lista de jogadores prontos, incluindo o owner
             )
           else
             # Jogador não está na sala, mas renderiza as informações da sala mesmo assim
             render json: room.as_json.merge(
-              players_count: room.players.count,
+              players_count: players_count,  # Inclui a contagem sem os kickados
               chairs: chairs,
-              player_kick_status: nil  # Jogador não está na sala, status 'kick' é nulo
+              player_kick_status: nil,  # Jogador não está na sala, status 'kick' é nulo
+              ready: ready_players  # Inclui a lista de jogadores prontos, incluindo o owner
             )
           end
         else
           # Jogador não foi encontrado, mas renderiza as informações da sala
           render json: room.as_json.merge(
-            players_count: room.players.count,
+            players_count: players_count,  # Inclui a contagem sem os kickados
             chairs: chairs,
-            player_kick_status: nil  # Jogador não foi encontrado, status 'kick' é nulo
+            player_kick_status: nil,  # Jogador não foi encontrado, status 'kick' é nulo
+            ready: ready_players  # Inclui a lista de jogadores prontos, incluindo o owner
           )
         end
       else
         render json: { error: "Room not found" }, status: :not_found
       end
     end
+    
+    
     
     
 
@@ -216,26 +233,47 @@ class RoomsController < ApplicationController
       player_name = params[:player_name]
       owner_name = request.headers['name']
       owner_uuid = request.headers['uuid']
-    
+      
       # Verificação do dono da sala (já existente)
       owner = Player.find_by(name: owner_name, uuid: owner_uuid)
       if owner.nil?
         render json: { error: 'Unauthorized: Player not found' }, status: :unauthorized
         return
       end
-    
-      # Validação 3: Verificar se o jogador está na sala
+      
+      # Verificar se o jogador está na sala
       player_to_kick = Player.find_by(name: player_name)
       room_player = RoomPlayer.find_by(room: @room, player: player_to_kick)
-    
+      
       if room_player
-        room_player.update(kick: true) # Marcar o jogador como expulso
-        @room.remove_player_from_chair(player_to_kick.name) # Remover da cadeira
-        render json: { message: "#{player_to_kick.name} has been kicked from the room", room: @room.as_json.merge(players_count: @room.players.count) }, status: :ok
+        room_player.update(kick: true, ready: false) # Marcar o jogador como expulso e 'ready' como false
+        @room.remove_player_from_chair(player_to_kick.name) # Remover o jogador da cadeira
+        
+        render json: { message: "#{player_to_kick.name} has been kicked from the room", room: @room.as_json.merge(players_count: @room.room_players.where(kick: false).count) }, status: :ok
       else
         render json: { error: 'Player not found in the room' }, status: :unprocessable_entity
       end
     end
+    
+
+    def update_ready_status
+      room = Room.find_by(uuid: params[:uuid])
+      player = Player.find_by(uuid: request.headers['uuid'])
+    
+      if room && player
+        room_player = RoomPlayer.find_by(room: room, player: player)
+        
+        if room_player
+          room_player.update(ready: params[:boolean])
+          render json: { message: "Ready status updated", ready: room_player.ready }, status: :ok
+        else
+          render json: { error: "Player not in room" }, status: :unprocessable_entity
+        end
+      else
+        render json: { error: "Room or player not found" }, status: :not_found
+      end
+    end
+    
   
     private
 
