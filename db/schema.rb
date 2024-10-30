@@ -26,6 +26,7 @@ ActiveRecord::Schema[7.2].define(version: 2024_10_28_230810) do
     t.datetime "updated_at", null: false
     t.boolean "kick", default: false
     t.boolean "ready", default: false
+    t.index ["room_id", "player_id"], name: "index_room_players_on_room_id_and_player_id", unique: true
   end
 
   create_table "rooms", primary_key: "uuid", id: :string, force: :cascade do |t|
@@ -41,5 +42,7 @@ ActiveRecord::Schema[7.2].define(version: 2024_10_28_230810) do
     t.index ["uuid"], name: "index_rooms_on_uuid", unique: true
   end
 
+  add_foreign_key "room_players", "players", primary_key: "uuid"
+  add_foreign_key "room_players", "rooms", primary_key: "uuid"
   add_foreign_key "rooms", "players", primary_key: "uuid"
 end

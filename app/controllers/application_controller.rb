@@ -20,3 +20,8 @@ class ApplicationController < ActionController::API
     end
   end
   #rails db:truncate_all
+  #rails server -b 0.0.0.0
+  #rails db:migrate
+  #rails db:drop
+  #rails db:create
+  #rails db:reset
