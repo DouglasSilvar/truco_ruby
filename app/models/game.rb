@@ -13,6 +13,27 @@ class Game < ApplicationRecord
       end
       save
     end
+
+    def as_json_with_chairs(options = {})
+    chairs = {
+      chair_a: room.chair_a,
+      chair_b: room.chair_b,
+      chair_c: room.chair_c,
+      chair_d: room.chair_d
+    }
+
+    # Constrói manualmente o JSON
+    {
+      uuid: uuid,
+      room_id: room_id,
+      score_us: score_us,
+      score_them: score_them,
+      created_at: created_at,
+      updated_at: updated_at,
+      chairs: chairs
+    }
+  end
+
   
     # Método para verificar se algum time venceu (pontuação mínima de 12)
     def winner
