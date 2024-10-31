@@ -11,11 +11,9 @@ class Room < ApplicationRecord
   # Modificando o as_json para excluir o campo password e adicionar o campo protected
   def as_json(options = {})
     super(options.merge(
-      except: [:player_id, :chair_a, :chair_b, :chair_c, :chair_d, :password], # Exclui o player_id, cadeiras e a senha
-      include: { 
-        owner: { only: [:name] } # Inclui apenas o nome do proprietário
-      }
-    )).merge(protected: password.present?) # Adiciona o campo protected
+      except: [:player_id, :chair_a, :chair_b, :chair_c, :chair_d, :password],
+      include: { owner: { only: [:name] } }
+    )).merge(protected: password.present?, game: game)
   end
 
   # Método para preencher aleatoriamente as cadeiras com o nome do jogador

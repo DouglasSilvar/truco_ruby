@@ -1,5 +1,5 @@
 class RoomsController < ApplicationController
-  before_action :set_room, only: [:kick_player]
+  before_action :set_room, only: [:kick_player, :start_game]
   skip_before_action :authenticate_player, only: [:index]
 
   def index
@@ -273,13 +273,49 @@ class RoomsController < ApplicationController
         render json: { error: "Room or player not found" }, status: :not_found
       end
     end
+
+    def start_game
+      player_uuid = request.headers['uuid']
+      
+      # Verifica se a sala existe
+      if @room.nil?
+        render json: { error: "Room not found" }, status: :not_found
+        return
+      end
+      
+      # Verifica se o solicitante é o owner da sala
+      if @room.owner.uuid != player_uuid
+        render json: { error: "Only the room owner can start the game" }, status: :forbidden
+        return
+      end
+      
+      # Verifica o número de jogadores prontos, excluindo o owner
+      ready_players_count = @room.room_players.where.not(player_id: @room.owner.uuid).where(ready: true, kick: false).count
+      Rails.logger.info "Number of ready players (excluding owner): #{ready_players_count}"
+      
+      if ready_players_count != 3
+        render json: { error: "Game cannot be started. There must be 3 players ready, excluding the owner." }, status: :unprocessable_entity
+        return
+      end
+      
+      # Inicia o jogo e cria o UUID
+      game_id = SecureRandom.uuid
+      @room.update(game: game_id)
+      
+      # Criar a entrada na tabela de jogos e verificar sucesso
+      game = Game.new(uuid: game_id, room_id: @room.uuid)
+      if game.save
+        render json: { message: "Game started", game_id: game_id }, status: :ok
+      else
+        render json: { error: "Failed to create game record", details: game.errors.full_messages }, status: :internal_server_error
+      end
+    end
     
-  
     private
 
     def set_room
       @room = Room.find_by(uuid: params[:uuid])
-      if @room.nil?
+      unless @room
         render json: { error: 'Room not found' }, status: :not_found
       end
     end

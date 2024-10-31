@@ -10,7 +10,16 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2024_10_28_230810) do
+ActiveRecord::Schema[7.2].define(version: 2024_10_31_000217) do
+  create_table "games", primary_key: "uuid", id: :string, force: :cascade do |t|
+    t.string "room_id", null: false
+    t.integer "score_us", default: 0
+    t.integer "score_them", default: 0
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["room_id"], name: "index_games_on_room_id"
+  end
+
   create_table "players", primary_key: "uuid", id: :string, force: :cascade do |t|
     t.string "name", null: false
     t.datetime "created_at", null: false
@@ -39,9 +48,11 @@ ActiveRecord::Schema[7.2].define(version: 2024_10_28_230810) do
     t.string "chair_c"
     t.string "chair_d"
     t.string "password", limit: 4
+    t.string "game"
     t.index ["uuid"], name: "index_rooms_on_uuid", unique: true
   end
 
+  add_foreign_key "games", "rooms", primary_key: "uuid"
   add_foreign_key "room_players", "players", primary_key: "uuid"
   add_foreign_key "room_players", "rooms", primary_key: "uuid"
   add_foreign_key "rooms", "players", primary_key: "uuid"
