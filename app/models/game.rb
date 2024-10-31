@@ -1,5 +1,6 @@
 class Game < ApplicationRecord
     belongs_to :room, foreign_key: 'room_id', primary_key: 'uuid'
+    has_many :steps, foreign_key: 'game_id', primary_key: 'uuid'
   
     # Inicializa as pontuações dos times e métodos para manipulação de jogo
     validates :score_us, :score_them, numericality: { only_integer: true, greater_than_or_equal_to: 0 }

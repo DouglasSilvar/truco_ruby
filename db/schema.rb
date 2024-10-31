@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2024_10_31_000217) do
+ActiveRecord::Schema[7.2].define(version: 2024_10_31_022530) do
   create_table "games", primary_key: "uuid", id: :string, force: :cascade do |t|
     t.string "room_id", null: false
     t.integer "score_us", default: 0
@@ -52,8 +52,28 @@ ActiveRecord::Schema[7.2].define(version: 2024_10_31_000217) do
     t.index ["uuid"], name: "index_rooms_on_uuid", unique: true
   end
 
+  create_table "steps", force: :cascade do |t|
+    t.string "game_id", null: false
+    t.integer "number", default: 1, null: false
+    t.json "table_cards", default: []
+    t.string "player_time"
+    t.string "player_call_3"
+    t.string "player_call_6"
+    t.string "player_call_9"
+    t.string "player_call_12"
+    t.string "mania"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.json "cards_chair_a", default: []
+    t.json "cards_chair_b", default: []
+    t.json "cards_chair_c", default: []
+    t.json "cards_chair_d", default: []
+    t.index ["game_id"], name: "index_steps_on_game_id"
+  end
+
   add_foreign_key "games", "rooms", primary_key: "uuid"
   add_foreign_key "room_players", "players", primary_key: "uuid"
   add_foreign_key "room_players", "rooms", primary_key: "uuid"
   add_foreign_key "rooms", "players", primary_key: "uuid"
+  add_foreign_key "steps", "games", primary_key: "uuid"
 end

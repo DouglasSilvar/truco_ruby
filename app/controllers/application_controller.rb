@@ -25,3 +25,4 @@ class ApplicationController < ActionController::API
   #rails db:drop
   #rails db:create
   #rails db:reset
+  #rails generate migration

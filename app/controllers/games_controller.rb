@@ -4,10 +4,12 @@ class GamesController < ApplicationController
   
     def show
         game = Game.find_by(uuid: params[:uuid])
+        
         if game
-          render json: game.as_json_with_chairs
+          step = game.steps.order(:number).last  # Pega o último passo ou cria um novo se for a primeira etapa
+          render json: game.as_json_with_chairs.merge(step: step.as_json)
         else
-          render json: { error: "Game not found" }, status: :not_found
+          render json: { error: 'Game not found' }, status: :not_found
         end
       end
   

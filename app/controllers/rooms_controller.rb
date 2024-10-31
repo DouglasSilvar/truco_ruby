@@ -282,30 +282,52 @@ class RoomsController < ApplicationController
         render json: { error: "Room not found" }, status: :not_found
         return
       end
-      
+    
       # Verifica se o solicitante é o owner da sala
       if @room.owner.uuid != player_uuid
         render json: { error: "Only the room owner can start the game" }, status: :forbidden
         return
       end
-      
+    
       # Verifica o número de jogadores prontos, excluindo o owner
       ready_players_count = @room.room_players.where.not(player_id: @room.owner.uuid).where(ready: true, kick: false).count
       Rails.logger.info "Number of ready players (excluding owner): #{ready_players_count}"
-      
+    
       if ready_players_count != 3
         render json: { error: "Game cannot be started. There must be 3 players ready, excluding the owner." }, status: :unprocessable_entity
         return
       end
-      
+    
       # Inicia o jogo e cria o UUID
       game_id = SecureRandom.uuid
       @room.update(game: game_id)
-      
+    
       # Criar a entrada na tabela de jogos e verificar sucesso
       game = Game.new(uuid: game_id, room_id: @room.uuid)
       if game.save
-        render json: { message: "Game started", game_id: game_id }, status: :ok
+        # Gerar e distribuir o baralho
+        deck = Step.generate_deck.shuffle
+        # Distribuir 3 cartas para cada jogador e definir a 'mania'
+        cards_chair_a, cards_chair_b, cards_chair_c, cards_chair_d = deck.shift(3), deck.shift(3), deck.shift(3), deck.shift(3)
+        mania = deck.shift # Define a carta 'mania' aleatoriamente
+    
+        # Criar o primeiro step para o jogo
+        step = Step.new(
+          game_id: game.uuid,
+          number: 1,
+          cards_chair_a: cards_chair_a,
+          cards_chair_b: cards_chair_b,
+          cards_chair_c: cards_chair_c,
+          cards_chair_d: cards_chair_d,
+          table_cards: [],
+          mania: mania,
+          player_time: @room.chair_a
+        )
+        if step.save
+          render json: { message: "Game started", game_id: game_id, step_id: step.id }, status: :ok
+        else
+          render json: { error: "Failed to create initial step", details: step.errors.full_messages }, status: :internal_server_error
+        end
       else
         render json: { error: "Failed to create game record", details: game.errors.full_messages }, status: :internal_server_error
       end
