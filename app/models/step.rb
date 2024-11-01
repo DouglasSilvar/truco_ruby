@@ -12,6 +12,14 @@ class Step < ApplicationRecord
       ranks = %w[A 2 3 4 5 6 7 Q J K]
       ranks.product(suits).map { |rank, suit| "#{rank}#{suit}" }
     end
+
+    def record_round_winner(round, team)
+      if round == 1
+        update(first: team)
+      elsif round == 2
+        update(second: team)
+      end
+    end
   
     private
 

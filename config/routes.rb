@@ -11,4 +11,5 @@ Rails.application.routes.draw do
   post 'rooms/:uuid/start', to: 'rooms#start_game'  # Nova rota para iniciar o jogo
 
   resources :games, only: [:show], param: :uuid
+  post '/games/:uuid/play_move', to: 'games#play_move'
 end

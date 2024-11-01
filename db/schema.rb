@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2024_11_01_004823) do
+ActiveRecord::Schema[7.2].define(version: 2024_11_01_012810) do
   create_table "games", primary_key: "uuid", id: :string, force: :cascade do |t|
     t.string "room_id", null: false
     t.integer "score_us", default: 0
@@ -68,6 +68,8 @@ ActiveRecord::Schema[7.2].define(version: 2024_11_01_004823) do
     t.json "cards_chair_b", default: []
     t.json "cards_chair_c", default: []
     t.json "cards_chair_d", default: []
+    t.string "first"
+    t.string "second"
     t.index ["game_id"], name: "index_steps_on_game_id"
   end
 
