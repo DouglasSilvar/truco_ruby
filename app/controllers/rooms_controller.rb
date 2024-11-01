@@ -307,9 +307,15 @@ class RoomsController < ApplicationController
       if game.save
         # Gerar e distribuir o baralho
         deck = Step.generate_deck.shuffle
-        # Distribuir 3 cartas para cada jogador e definir a 'mania'
+        Rails.logger.debug "Generated deck: #{deck.inspect}"
+        Rails.logger.info "Game created with UUID: #{game.uuid}"
+    
+        # Distribuir 3 cartas para cada jogador e definir a 'vira'
         cards_chair_a, cards_chair_b, cards_chair_c, cards_chair_d = deck.shift(3), deck.shift(3), deck.shift(3), deck.shift(3)
-        mania = deck.shift # Define a carta 'mania' aleatoriamente
+        vira = deck.shift # Define a carta 'vira' aleatoriamente
+    
+        # Agora que as cartas foram atribuídas, registre o log
+        Rails.logger.info "Cards Chair A: #{cards_chair_a}, Cards Chair B: #{cards_chair_b}, Cards Chair C: #{cards_chair_c}, Cards Chair D: #{cards_chair_d}"
     
         # Criar o primeiro step para o jogo
         step = Step.new(
@@ -320,7 +326,7 @@ class RoomsController < ApplicationController
           cards_chair_c: cards_chair_c,
           cards_chair_d: cards_chair_d,
           table_cards: [],
-          mania: mania,
+          vira: vira,
           player_time: @room.chair_a
         )
         if step.save
@@ -332,6 +338,7 @@ class RoomsController < ApplicationController
         render json: { error: "Failed to create game record", details: game.errors.full_messages }, status: :internal_server_error
       end
     end
+    
     
     private
 

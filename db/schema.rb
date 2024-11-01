@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2024_10_31_022530) do
+ActiveRecord::Schema[7.2].define(version: 2024_11_01_004823) do
   create_table "games", primary_key: "uuid", id: :string, force: :cascade do |t|
     t.string "room_id", null: false
     t.integer "score_us", default: 0
@@ -61,7 +61,7 @@ ActiveRecord::Schema[7.2].define(version: 2024_10_31_022530) do
     t.string "player_call_6"
     t.string "player_call_9"
     t.string "player_call_12"
-    t.string "mania"
+    t.string "vira"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.json "cards_chair_a", default: []
