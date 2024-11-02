@@ -24,7 +24,10 @@ class GamesController < ApplicationController
       end
 
       # Montar a resposta final com as cartas filtradas
-      render json: game.as_json_with_chairs.merge(step: step_data)
+      render json: game.as_json_with_chairs.merge(
+        step: step_data,
+        room_name: game.room.name # Inclui o nome da sala
+      )
     else
       render json: { error: 'Game not found' }, status: :not_found
     end
