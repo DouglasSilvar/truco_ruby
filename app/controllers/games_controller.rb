@@ -2,17 +2,33 @@ class GamesController < ApplicationController
   before_action :authenticate_player, only: [:show, :play_move]
   before_action :set_game, only: [:show, :play_move]
   
-    def show
-        game = Game.find_by(uuid: params[:uuid])
-        
-        if game
-          step = game.steps.order(:number).last  # Pega o último passo ou cria um novo se for a primeira etapa
-          render json: game.as_json_with_chairs.merge(step: step.as_json)
-        else
-          render json: { error: 'Game not found' }, status: :not_found
-        end
+  def show
+    player_name = request.headers['name']
+    game = Game.find_by(uuid: params[:uuid])
+
+    if game
+      # Verificar se o jogador pertence à sala e identificar a cadeira
+      player_chair = find_player_chair(game.room, player_name)
+      unless player_chair
+        render json: { error: "Player is not part of this game" }, status: :forbidden
+        return
       end
-  
+
+      # Pegar o último passo do jogo
+      step = game.steps.order(:number).last
+
+      # Construir a resposta JSON com cartas vazias para as cadeiras que não pertencem ao jogador
+      step_data = step.as_json
+      %w[cards_chair_a cards_chair_b cards_chair_c cards_chair_d].each do |chair|
+        step_data[chair] = (chair == "cards_#{player_chair}") ? step.send(chair) : []
+      end
+
+      # Montar a resposta final com as cartas filtradas
+      render json: game.as_json_with_chairs.merge(step: step_data)
+    else
+      render json: { error: 'Game not found' }, status: :not_found
+    end
+  end
       def play_move
         player_name = request.headers['name']
         card = params[:card]
