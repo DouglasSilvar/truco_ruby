@@ -8,7 +8,7 @@ Rails.application.routes.draw do
   post 'rooms/:uuid/changechair', to: 'rooms#change_chair'
   post 'rooms/:uuid/kick', to: 'rooms#kick_player'
   post 'rooms/:uuid/ready/:boolean', to: 'rooms#update_ready_status'
-  post 'rooms/:uuid/start', to: 'rooms#start_game'  # Nova rota para iniciar o jogo
+  post 'rooms/:uuid/start', to: 'rooms#start_game' 
 
   resources :games, only: [:show], param: :uuid
   post '/games/:uuid/play_move', to: 'games#play_move'
