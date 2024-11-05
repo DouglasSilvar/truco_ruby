@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2024_11_03_204202) do
+ActiveRecord::Schema[7.2].define(version: 2024_11_04_235515) do
   create_table "games", primary_key: "uuid", id: :string, force: :cascade do |t|
     t.string "room_id", null: false
     t.integer "score_us", default: 0
@@ -49,6 +49,7 @@ ActiveRecord::Schema[7.2].define(version: 2024_11_03_204202) do
     t.string "chair_d"
     t.string "password", limit: 4
     t.string "game"
+    t.string "room_owner"
     t.index ["uuid"], name: "index_rooms_on_uuid", unique: true
   end
 

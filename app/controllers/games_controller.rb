@@ -19,9 +19,13 @@ class GamesController < ApplicationController
         step_data[chair] = (chair == "cards_#{player_chair}") ? step.send(chair) : []
       end
 
+      # Adiciona o owner da sala ao JSON
+      owner_data = { name: game.room.owner.name } if game.room.owner
+
       render json: game.as_json_with_chairs.merge(
         step: step_data,
-        room_name: game.room.name
+        room_name: game.room.name,
+        owner: owner_data  # Inclui o owner no JSON
       )
     else
       render json: { error: "Game not found" }, status: :not_found
@@ -195,5 +199,5 @@ def calculate_card_strength(card, mania_card, hierarchy, chair)
   base_strength
 end
 
-####################################################################################################
+  ####################################################################################################
 end
