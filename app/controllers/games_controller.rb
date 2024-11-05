@@ -37,6 +37,7 @@ class GamesController < ApplicationController
     card = params[:card]
     coverup = ActiveModel::Type::Boolean.new.cast(params[:coverup])
     accept = ActiveModel::Type::Boolean.new.cast(params[:accept])
+    collect = ActiveModel::Type::Boolean.new.cast(params[:collect])
     call = params[:call]
 
     player_chair = find_player_chair(@game.room, player_name)
@@ -45,7 +46,14 @@ class GamesController < ApplicationController
       return
     end
 
+
+
     step = @game.steps.order(:number).last
+
+    if collect
+      handle_collect(step, player_chair)
+    else
+
     if step.player_time != player_name
       render json: { error: "Not your turn" }, status: :forbidden
       return
@@ -78,26 +86,31 @@ class GamesController < ApplicationController
     card_origin_record = "#{card}---#{player_chair}---#{team}---#{player_name}"
     puts "Resultado de card_origin_record: #{card_origin_record}"
 
-    # Save card origin in the first available column
-    if step.first_card_origin.nil?
-      step.update(first_card_origin: card_origin_record)
-    elsif step.second_card_origin.nil?
-      step.update(second_card_origin: card_origin_record)
-    elsif step.third_card_origin.nil?
-      step.update(third_card_origin: card_origin_record)
-    elsif step.fourth_card_origin.nil?
-      step.update(fourth_card_origin: card_origin_record)
+# Save card origin in the first available column
+if step.first_card_origin.nil?
+  step.update(first_card_origin: card_origin_record)
+elsif step.second_card_origin.nil?
+  step.update(second_card_origin: card_origin_record)
+elsif step.third_card_origin.nil?
+  step.update(third_card_origin: card_origin_record)
+elsif step.fourth_card_origin.nil?
+  step.update(fourth_card_origin: card_origin_record)
+end
+
+# Se todas as quatro colunas de origem estiverem preenchidas, não definir o próximo jogador
+if step.fourth_card_origin.nil?
+  # Determine next player in sequence A -> D -> B -> C -> A
+  chair_order = %w[A D B C]
+  next_chair = chair_order[(chair_order.index(player_chair[-1].upcase) + 1) % chair_order.length]
+  next_player_name = @game.room.send("chair_#{next_chair.downcase}")
+  step.update(player_time: next_player_name)
+end
+
+# Determina o vencedor da rodada
+determine_round_winner(step)
+
+head :ok
     end
-
-    # Determine next player in sequence A -> D -> B -> C -> A
-    chair_order = %w[A D B C]
-    next_chair = chair_order[(chair_order.index(player_chair[-1].upcase) + 1) % chair_order.length]
-    next_player_name = @game.room.send("chair_#{next_chair.downcase}")
-    step.update(player_time: next_player_name)
-
-    determine_round_winner(step)
-
-    head :ok
   end
 
   private
@@ -197,6 +210,54 @@ def calculate_card_strength(card, mania_card, hierarchy, chair)
   end
   Rails.logger.info "Base strength: #{base_strength}"
   base_strength
+end
+
+def handle_collect(step, player_chair)
+  # Define o próximo jogador com base na coluna `first`
+  if step.first == "EMPACHADO"
+    # Segue a ordem natural
+    chair_order = %w[A D B C]
+    next_chair = chair_order[(chair_order.index(player_chair[-1].upcase) + 1) % chair_order.length]
+    next_player_name = @game.room.send("chair_#{next_chair.downcase}")
+  else
+    # Filtra as cartas do time vencedor
+    card_origins = [
+      step.first_card_origin,
+      step.second_card_origin,
+      step.third_card_origin,
+      step.fourth_card_origin
+    ].compact
+
+    winner = step.first
+    winning_team_cards = card_origins.select { |origin| origin.include?("---#{winner}---") }
+
+    # Encontra a carta mais forte no time vencedor
+    strongest_card = winning_team_cards.max_by do |origin|
+      card, chair, team, player_name = origin.split("---")
+      calculate_card_strength(card, step.vira, %w[4 5 6 7 Q J K A 2 3], chair)
+    end
+
+    # Verifica se há um vencedor claro; caso contrário, segue a ordem natural
+    if winning_team_cards.count { |origin| 
+      calculate_card_strength(origin.split("---")[0], step.vira, %w[4 5 6 7 Q J K A 2 3], origin.split("---")[1]) == calculate_card_strength(strongest_card.split("---")[0], step.vira, %w[4 5 6 7 Q J K A 2 3], strongest_card.split("---")[1])
+    } > 1
+      # Empate na força; segue ordem natural
+      chair_order = %w[A D B C]
+      next_chair = chair_order[(chair_order.index(player_chair[-1].upcase) + 1) % chair_order.length]
+      next_player_name = @game.room.send("chair_#{next_chair.downcase}")
+    else
+      # Define o jogador com a carta mais forte como `player_time`
+      next_player_name = strongest_card.split("---")[3]
+    end
+  end
+
+  # Zera o array `table_cards`
+  step.update(table_cards: [])
+
+  # Define o próximo jogador
+  step.update(player_time: next_player_name)
+
+  head :ok
 end
 
   ####################################################################################################
