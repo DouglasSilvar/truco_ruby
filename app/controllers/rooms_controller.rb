@@ -1,6 +1,6 @@
 class RoomsController < ApplicationController
   before_action :set_room, only: [ :kick_player, :start_game ]
-  skip_before_action :authenticate_player, only: [ :index ]
+  skip_before_action :authenticate_player, only: [:index, :show]
 
   def index
     rooms = Room.page(params[:page]).per(10)
