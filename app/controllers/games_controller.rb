@@ -84,6 +84,7 @@ class GamesController < ApplicationController
     player_cards.delete(card)
     step.update("cards_#{player_chair}" => player_cards)
 
+  
     # Determine the team based on the player's chair
     player_chair_modified = player_chair.strip.upcase[-1]  # Pega a última letra de player_chair (A, B, etc.)
     puts "Valor ajustado de player_chair: #{player_chair}"  # Verifica o valor exato
@@ -132,7 +133,6 @@ head :ok
 
 # Método para determinar o vencedor da rodada quando 4 cartas estão na mesa
 def determine_round_winner(step)
-  # Obtendo as cartas e origem dos jogadores
   table_cards = step.table_cards
   card_origins = [
     step.first_card_origin,
@@ -144,23 +144,24 @@ def determine_round_winner(step)
   # Retorna se não houver exatamente 4 cartas na mesa
   return if table_cards.size != 4 || card_origins.size != 4
 
-  # Analisar as cartas e decidir o vencedor com base na VIRA e MANIA
-  winner = calculate_winner(table_cards, card_origins, step.vira)
+  # Identificar o time vencedor e a carta mais forte
+  winner_team, strongest_card_origin = calculate_winner(table_cards, card_origins, step.vira)
 
-  # Salvar o vencedor na coluna `first` do passo
-  step.update(first: winner)
+  # Atualizar o vencedor e próximo jogador
+  step.update(
+    first: winner_team,
+    player_time: strongest_card_origin.split("---")[3] # Extrai o nome do jogador com a carta mais forte
+  )
 end
 ##############################################################################################################################################
 # Método auxiliar para calcular o vencedor da rodada com base nas regras
 def calculate_winner(table_cards, card_origins, vira)
-  # Mapeamento de hierarquia básica de força das cartas
   card_hierarchy = %w[4 5 6 7 Q J K A 2 3]
   vira_value = vira[0..-2] # Remove o último caractere (naipe) da carta
 
-  # Determinar a carta MANIA com base na VIRA
   mania_card = card_hierarchy[(card_hierarchy.index(vira_value) + 1) % card_hierarchy.size] if card_hierarchy.index(vira_value)
 
-  # Determinando a força das cartas com base em MANIA e hierarquia de naipes
+  # Avaliar a força das cartas
   card_values = card_origins.map do |origin|
     card, chair, team, player_name = origin.split("---")
     {
@@ -172,29 +173,19 @@ def calculate_winner(table_cards, card_origins, vira)
     }
   end
 
-  # Priorizar a MANIA: se uma MANIA foi jogada, o time que jogou a MANIA vence
   mania_played = card_values.find { |entry| entry[:card] == mania_card }
-  return mania_played[:team] if mania_played
+  return [ mania_played[:team], mania_played ] if mania_played
 
-  # Agrupar cartas por time
   teams = card_values.group_by { |entry| entry[:team] }
-  team_nos = teams["NOS"] || []
-  team_eles = teams["ELES"] || []
+  max_nos_card = teams["NOS"]&.max_by { |entry| entry[:strength] }
+  max_eles_card = teams["ELES"]&.max_by { |entry| entry[:strength] }
 
-  # Identificar as cartas mais fortes de cada time
-  max_nos_card = team_nos.max_by { |entry| entry[:strength] }
-  max_eles_card = team_eles.max_by { |entry| entry[:strength] }
-
-  # Verificar empate apenas se as cartas mais fortes de cada time têm o mesmo valor
   if max_nos_card && max_eles_card && max_nos_card[:strength] == max_eles_card[:strength]
-    "EMPACHADO"
+    [ "EMPACHADO", nil ]
   else
-    # Determinar o time vencedor pela carta mais forte
-    if max_nos_card && max_eles_card
-      max_nos_card[:strength] > max_eles_card[:strength] ? "NOS" : "ELES"
-    else
-      max_nos_card ? "NOS" : "ELES"
-    end
+    winning_team = max_nos_card[:strength] > max_eles_card[:strength] ? "NOS" : "ELES"
+    strongest_card = [ max_nos_card, max_eles_card ].compact.max_by { |entry| entry[:strength] }
+    [ winning_team, strongest_card[:card] + "---" + strongest_card[:chair] + "---" + strongest_card[:team] + "---" + strongest_card[:player_name] ]
   end
 end
 
