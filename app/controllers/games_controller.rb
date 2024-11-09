@@ -40,13 +40,18 @@ class GamesController < ApplicationController
     collect = ActiveModel::Type::Boolean.new.cast(params[:collect])
     call = params[:call]
 
-    player_chair = find_player_chair(@game.room, player_name)
-    unless player_chair
-      render json: { error: "Player is not part of this game" }, status: :forbidden
-      return
-    end
+    # Verifica se já há 4 cartas na mesa
+    step = @game.steps.order(:number).last
+       if card && step.table_cards.size >= 4
+        render json: { error: "Cannot play card, table already has 4 cards" }, status: :forbidden
+        return
+       end
 
-
+      player_chair = find_player_chair(@game.room, player_name)
+      unless player_chair
+         render json: { error: "Player is not part of this game" }, status: :forbidden
+        return
+      end
 
     step = @game.steps.order(:number).last
 
@@ -63,6 +68,7 @@ class GamesController < ApplicationController
       render json: { error: "Invalid card or card not in player's hand" }, status: :unprocessable_entity
       return
     end
+
 
     Rails.logger.info "Player #{player_name} plays card: #{card}, coverup: #{coverup}, accept: #{accept}, call: #{call}"
 
@@ -238,7 +244,7 @@ def handle_collect(step, player_chair)
     end
 
     # Verifica se há um vencedor claro; caso contrário, segue a ordem natural
-    if winning_team_cards.count { |origin| 
+    if winning_team_cards.count { |origin|
       calculate_card_strength(origin.split("---")[0], step.vira, %w[4 5 6 7 Q J K A 2 3], origin.split("---")[1]) == calculate_card_strength(strongest_card.split("---")[0], step.vira, %w[4 5 6 7 Q J K A 2 3], strongest_card.split("---")[1])
     } > 1
       # Empate na força; segue ordem natural
@@ -252,10 +258,14 @@ def handle_collect(step, player_chair)
   end
 
   # Zera o array `table_cards`
-  step.update(table_cards: [])
-
-  # Define o próximo jogador
-  step.update(player_time: next_player_name)
+  step.update(
+    table_cards: [],
+    player_time: next_player_name,
+    first_card_origin: nil,
+    second_card_origin: nil,
+    third_card_origin: nil,
+    fourth_card_origin: nil
+  )
 
   head :ok
 end
