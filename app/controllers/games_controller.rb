@@ -84,7 +84,7 @@ class GamesController < ApplicationController
     player_cards.delete(card)
     step.update("cards_#{player_chair}" => player_cards)
 
-  
+
     # Determine the team based on the player's chair
     player_chair_modified = player_chair.strip.upcase[-1]  # Pega a última letra de player_chair (A, B, etc.)
     puts "Valor ajustado de player_chair: #{player_chair}"  # Verifica o valor exato
@@ -147,18 +147,37 @@ def determine_round_winner(step)
   # Identificar o time vencedor e a carta mais forte
   winner_team, strongest_card_origin = calculate_winner(table_cards, card_origins, step.vira)
 
-  # Atualizar o vencedor e próximo jogador
-  step.update(
-    first: winner_team,
-    player_time: strongest_card_origin.split("---")[3] # Extrai o nome do jogador com a carta mais forte
-  )
+  # Verifica se houve um empate ou se não foi possível identificar a origem da carta mais forte
+  if winner_team == "EMPACHE" || strongest_card_origin.nil?
+    # Define `player_time` para o próximo jogador
+    chair_order = %w[A D B C]
+    current_chair = step.player_time ? step.player_time[-1].upcase : "A"
+    next_chair = chair_order[(chair_order.index(current_chair) + 1) % chair_order.length]
+    next_player_name = @game.room.send("chair_#{next_chair.downcase}")
+  
+    step.update(first: "EMPACHE", player_time: next_player_name)
+    return # Finaliza a execução para evitar operações adicionais com `nil`
+  end
+
+  # Salva o vencedor no campo apropriado (first ou second), garantindo que strongest_card_origin não seja nil
+  if step.first.nil?
+    step.update(
+      first: winner_team,
+      player_time: strongest_card_origin&.split("---")&.fetch(3, nil) # Extrai o nome do jogador com a carta mais forte
+    )
+  else
+    step.update(
+      second: winner_team,
+      player_time: strongest_card_origin&.split("---")&.fetch(3, nil) # Extrai o nome do jogador com a carta mais forte
+    )
+  end
 end
+
 ##############################################################################################################################################
 # Método auxiliar para calcular o vencedor da rodada com base nas regras
 def calculate_winner(table_cards, card_origins, vira)
   card_hierarchy = %w[4 5 6 7 Q J K A 2 3]
   vira_value = vira[0..-2] # Remove o último caractere (naipe) da carta
-
   mania_card = card_hierarchy[(card_hierarchy.index(vira_value) + 1) % card_hierarchy.size] if card_hierarchy.index(vira_value)
 
   # Avaliar a força das cartas
@@ -173,20 +192,24 @@ def calculate_winner(table_cards, card_origins, vira)
     }
   end
 
+  # Verifica se uma carta "mania" foi jogada
   mania_played = card_values.find { |entry| entry[:card] == mania_card }
-  return [ mania_played[:team], mania_played ] if mania_played
+  return [mania_played[:team], mania_played] if mania_played
 
+  # Agrupando por equipe para determinar o maior valor em cada time
   teams = card_values.group_by { |entry| entry[:team] }
   max_nos_card = teams["NOS"]&.max_by { |entry| entry[:strength] }
   max_eles_card = teams["ELES"]&.max_by { |entry| entry[:strength] }
 
+  # Determina empate caso as forças sejam iguais
   if max_nos_card && max_eles_card && max_nos_card[:strength] == max_eles_card[:strength]
-    [ "EMPACHADO", nil ]
-  else
-    winning_team = max_nos_card[:strength] > max_eles_card[:strength] ? "NOS" : "ELES"
-    strongest_card = [ max_nos_card, max_eles_card ].compact.max_by { |entry| entry[:strength] }
-    [ winning_team, strongest_card[:card] + "---" + strongest_card[:chair] + "---" + strongest_card[:team] + "---" + strongest_card[:player_name] ]
+    return ["EMPACHE", nil]
   end
+
+  # Define o time vencedor com a carta mais forte
+  winning_team = max_nos_card[:strength] > max_eles_card[:strength] ? "NOS" : "ELES"
+  strongest_card = [max_nos_card, max_eles_card].compact.max_by { |entry| entry[:strength] }
+  [winning_team, "#{strongest_card[:card]}---#{strongest_card[:chair]}---#{strongest_card[:team]}---#{strongest_card[:player_name]}"]
 end
 
 # Calcula a força de uma carta considerando a MANIA e hierarquia de naipes
@@ -210,48 +233,8 @@ def calculate_card_strength(card, mania_card, hierarchy, chair)
 end
 
 def handle_collect(step, player_chair)
-  # Define o próximo jogador com base na coluna `first`
-  if step.first == "EMPACHADO"
-    # Segue a ordem natural
-    chair_order = %w[A D B C]
-    next_chair = chair_order[(chair_order.index(player_chair[-1].upcase) + 1) % chair_order.length]
-    next_player_name = @game.room.send("chair_#{next_chair.downcase}")
-  else
-    # Filtra as cartas do time vencedor
-    card_origins = [
-      step.first_card_origin,
-      step.second_card_origin,
-      step.third_card_origin,
-      step.fourth_card_origin
-    ].compact
-
-    winner = step.first
-    winning_team_cards = card_origins.select { |origin| origin.include?("---#{winner}---") }
-
-    # Encontra a carta mais forte no time vencedor
-    strongest_card = winning_team_cards.max_by do |origin|
-      card, chair, team, player_name = origin.split("---")
-      calculate_card_strength(card, step.vira, %w[4 5 6 7 Q J K A 2 3], chair)
-    end
-
-    # Verifica se há um vencedor claro; caso contrário, segue a ordem natural
-    if winning_team_cards.count { |origin|
-      calculate_card_strength(origin.split("---")[0], step.vira, %w[4 5 6 7 Q J K A 2 3], origin.split("---")[1]) == calculate_card_strength(strongest_card.split("---")[0], step.vira, %w[4 5 6 7 Q J K A 2 3], strongest_card.split("---")[1])
-    } > 1
-      # Empate na força; segue ordem natural
-      chair_order = %w[A D B C]
-      next_chair = chair_order[(chair_order.index(player_chair[-1].upcase) + 1) % chair_order.length]
-      next_player_name = @game.room.send("chair_#{next_chair.downcase}")
-    else
-      # Define o jogador com a carta mais forte como `player_time`
-      next_player_name = strongest_card.split("---")[3]
-    end
-  end
-
-  # Zera o array `table_cards`
   step.update(
     table_cards: [],
-    player_time: next_player_name,
     first_card_origin: nil,
     second_card_origin: nil,
     third_card_origin: nil,
