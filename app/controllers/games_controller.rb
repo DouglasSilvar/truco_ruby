@@ -132,6 +132,7 @@ head :ok
   end
 
 # Método para determinar o vencedor da rodada quando 4 cartas estão na mesa
+# Método para determinar o vencedor da rodada quando 4 cartas estão na mesa
 def determine_round_winner(step)
   table_cards = step.table_cards
   card_origins = [
@@ -149,13 +150,25 @@ def determine_round_winner(step)
 
   # Verifica se houve um empate ou se não foi possível identificar a origem da carta mais forte
   if winner_team == "EMPACHE" || strongest_card_origin.nil?
-    # Define `player_time` para o próximo jogador
-    chair_order = %w[A D B C]
-    current_chair = step.player_time ? step.player_time[-1].upcase : "A"
-    next_chair = chair_order[(chair_order.index(current_chair) + 1) % chair_order.length]
-    next_player_name = @game.room.send("chair_#{next_chair.downcase}")
-  
-    step.update(first: "EMPACHE", player_time: next_player_name)
+    # Atualize o trecho abaixo
+    if step.fourth_card_origin
+      current_chair = step.fourth_card_origin.split("---")[1] # Extraindo "chair_a", "chair_b", etc.
+      current_chair_letter = current_chair[-1].upcase # Obtendo apenas a letra da cadeira (A, B, C, D)
+
+      # Ordem natural das cadeiras
+      chair_order = %w[A D B C]
+
+      # Encontrando a próxima cadeira na ordem natural
+      next_chair = chair_order[(chair_order.index(current_chair_letter) + 1) % chair_order.length]
+
+      # Definindo o próximo jogador
+      next_player_name = @game.room.send("chair_#{next_chair.downcase}")
+      step.update(first: "EMPACHE", player_time: next_player_name)
+    else
+      render json: { error: "Unable to determine next chair" }, status: :unprocessable_entity
+      return
+    end
+
     return # Finaliza a execução para evitar operações adicionais com `nil`
   end
 
@@ -172,6 +185,7 @@ def determine_round_winner(step)
     )
   end
 end
+
 
 ##############################################################################################################################################
 # Método auxiliar para calcular o vencedor da rodada com base nas regras
