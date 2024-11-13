@@ -10,13 +10,14 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2024_11_04_235515) do
+ActiveRecord::Schema[7.2].define(version: 2024_11_12_235635) do
   create_table "games", primary_key: "uuid", id: :string, force: :cascade do |t|
     t.string "room_id", null: false
     t.integer "score_us", default: 0
     t.integer "score_them", default: 0
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.json "game_show", default: {}
     t.index ["room_id"], name: "index_games_on_room_id"
   end
 
@@ -50,6 +51,7 @@ ActiveRecord::Schema[7.2].define(version: 2024_11_04_235515) do
     t.string "password", limit: 4
     t.string "game"
     t.string "room_owner"
+    t.json "room_show", default: {}
     t.index ["uuid"], name: "index_rooms_on_uuid", unique: true
   end
 
@@ -75,6 +77,7 @@ ActiveRecord::Schema[7.2].define(version: 2024_11_04_235515) do
     t.string "second_card_origin"
     t.string "third_card_origin"
     t.string "fourth_card_origin"
+    t.string "win", limit: 4
     t.index ["game_id"], name: "index_steps_on_game_id"
   end
 

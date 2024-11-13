@@ -93,16 +93,19 @@ class GamesController < ApplicationController
     card_origin_record = "#{card}---#{player_chair}---#{team}---#{player_name}"
     puts "Resultado de card_origin_record: #{card_origin_record}"
 
-# Save card origin in the first available column
-if step.first_card_origin.nil?
-  step.update(first_card_origin: card_origin_record)
-elsif step.second_card_origin.nil?
-  step.update(second_card_origin: card_origin_record)
-elsif step.third_card_origin.nil?
-  step.update(third_card_origin: card_origin_record)
-elsif step.fourth_card_origin.nil?
-  step.update(fourth_card_origin: card_origin_record)
-end
+    # Save card origin in the first available column
+    if step.first_card_origin.nil?
+     step.update(first_card_origin: card_origin_record)
+    elsif step.second_card_origin.nil?
+     step.update(second_card_origin: card_origin_record)
+    elsif step.third_card_origin.nil?
+     step.update(third_card_origin: card_origin_record)
+    elsif step.fourth_card_origin.nil?
+    step.update(fourth_card_origin: card_origin_record)
+
+    
+
+  end
 
 # Se todas as quatro colunas de origem estiverem preenchidas, não definir o próximo jogador
 if step.fourth_card_origin.nil?
@@ -115,6 +118,7 @@ end
 
 # Determina o vencedor da rodada
 determine_round_winner(step)
+determine_game_winner(step)
 
 head :ok
     end
@@ -131,7 +135,6 @@ head :ok
     render json: { error: "Game not found" }, status: :not_found unless @game
   end
 
-# Método para determinar o vencedor da rodada quando 4 cartas estão na mesa
 # Método para determinar o vencedor da rodada quando 4 cartas estão na mesa
 def determine_round_winner(step)
   table_cards = step.table_cards
@@ -208,7 +211,7 @@ def calculate_winner(table_cards, card_origins, vira)
 
   # Verifica se uma carta "mania" foi jogada
   mania_played = card_values.find { |entry| entry[:card] == mania_card }
-  return [mania_played[:team], mania_played] if mania_played
+  return [ mania_played[:team], mania_played ] if mania_played
 
   # Agrupando por equipe para determinar o maior valor em cada time
   teams = card_values.group_by { |entry| entry[:team] }
@@ -217,13 +220,13 @@ def calculate_winner(table_cards, card_origins, vira)
 
   # Determina empate caso as forças sejam iguais
   if max_nos_card && max_eles_card && max_nos_card[:strength] == max_eles_card[:strength]
-    return ["EMPACHE", nil]
+    return [ "EMPACHE", nil ]
   end
 
   # Define o time vencedor com a carta mais forte
   winning_team = max_nos_card[:strength] > max_eles_card[:strength] ? "NOS" : "ELES"
-  strongest_card = [max_nos_card, max_eles_card].compact.max_by { |entry| entry[:strength] }
-  [winning_team, "#{strongest_card[:card]}---#{strongest_card[:chair]}---#{strongest_card[:team]}---#{strongest_card[:player_name]}"]
+  strongest_card = [ max_nos_card, max_eles_card ].compact.max_by { |entry| entry[:strength] }
+  [ winning_team, "#{strongest_card[:card]}---#{strongest_card[:chair]}---#{strongest_card[:team]}---#{strongest_card[:player_name]}" ]
 end
 
 # Calcula a força de uma carta considerando a MANIA e hierarquia de naipes
@@ -247,16 +250,73 @@ def calculate_card_strength(card, mania_card, hierarchy, chair)
 end
 
 def handle_collect(step, player_chair)
-  step.update(
-    table_cards: [],
-    first_card_origin: nil,
-    second_card_origin: nil,
-    third_card_origin: nil,
-    fourth_card_origin: nil
-  )
+  # Verifica se há um vencedor para o round atual
+  if step.win && step.win != "EMPT"
+    game = step.game # Obtem o jogo associado ao step atual
 
-  head :ok
+    # Incrementa o placar com base no vencedor
+    if step.win == "NOS"
+      game.increment!(:score_us)
+    elsif step.win == "ELES"
+      game.increment!(:score_them)
+    end
+
+    # Apaga o step atual para iniciar um novo round
+    step.destroy
+
+    # Criar um novo step para o próximo round no mesmo jogo
+    deck = Step.generate_deck.shuffle
+    cards_chair_a, cards_chair_b, cards_chair_c, cards_chair_d = deck.shift(3), deck.shift(3), deck.shift(3), deck.shift(3)
+    vira = deck.shift
+
+    new_step = Step.new(
+      game_id: game.uuid,
+      number: step.number + 1,
+      cards_chair_a: cards_chair_a,
+      cards_chair_b: cards_chair_b,
+      cards_chair_c: cards_chair_c,
+      cards_chair_d: cards_chair_d,
+      table_cards: [],
+      vira: vira,
+      player_time: game.room.chair_a # Reinicia o jogador a partir da cadeira A
+    )
+
+    if new_step.save
+      Rails.logger.info "Novo step criado para o jogo #{game.uuid} com o ID #{new_step.id}"
+      render json: { message: "Ponto computado e novo round iniciado", step_id: new_step.id }, status: :ok
+    else
+      render json: { error: "Falha ao criar novo round", details: new_step.errors.full_messages }, status: :internal_server_error
+    end
+  else
+    # Se não houver vencedor, apenas limpa as cartas e origens do step atual
+    step.update(
+      table_cards: [],
+      first_card_origin: nil,
+      second_card_origin: nil,
+      third_card_origin: nil,
+      fourth_card_origin: nil
+    )
+
+    head :ok
+  end
 end
+
+def determine_game_winner(step)
+  # Regra 1: Verifica se o mesmo time venceu a primeira e a segunda rodadas
+  if step.first && step.second && step.first == step.second
+    step.update(win: step.first)
+  # Regra 2: Se a primeira rodada foi EMPACHADA e a segunda tem um vencedor, esse time vence
+  elsif step.first == "EMPACHE" && step.second
+    step.update(win: step.second)
+  # Regra 3: Se a primeira rodada foi vencida por um time e a segunda foi EMPACHADA, o time que ganhou a primeira vence
+  elsif step.first && step.second == "EMPACHE"
+    step.update(win: step.first)
+  # Regra 4: Se todas as três rodadas (implícito na sequência) empacharem, o jogo termina sem vencedor
+  elsif step.first == "EMPACHE" && step.second == "EMPACHE"
+    step.update(win: "EMPT")
+  end
+end
+
 
   ####################################################################################################
 end
