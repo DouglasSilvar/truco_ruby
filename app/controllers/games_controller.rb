@@ -13,7 +13,13 @@ class GamesController < ApplicationController
         return
       end
 
+      # Carregar o último `step` do jogo
       step = game.steps.order(:number).last
+      if step.nil?
+        render json: { error: "No step available for this game" }, status: :not_found
+        return
+      end
+
       step_data = step.as_json
       %w[cards_chair_a cards_chair_b cards_chair_c cards_chair_d].each do |chair|
         step_data[chair] = (chair == "cards_#{player_chair}") ? step.send(chair) : []
@@ -25,12 +31,13 @@ class GamesController < ApplicationController
       render json: game.as_json_with_chairs.merge(
         step: step_data,
         room_name: game.room.name,
-        owner: owner_data  # Inclui o owner no JSON
+        owner: owner_data
       )
     else
       render json: { error: "Game not found" }, status: :not_found
     end
   end
+
 
   def play_move
     player_name = request.headers["name"]
@@ -153,20 +160,23 @@ def determine_round_winner(step)
 
   # Verifica se houve um empate ou se não foi possível identificar a origem da carta mais forte
   if winner_team == "EMPACHE" || strongest_card_origin.nil?
-    # Atualize o trecho abaixo
+    # Atualiza o campo apropriado (first, second ou third) com "EMPACHE"
+    if step.first.nil?
+      step.update(first: "EMPACHE")
+    elsif step.second.nil?
+      step.update(second: "EMPACHE")
+    else
+      step.update(third: "EMPACHE")
+    end
+
+    # Determina o próximo jogador após o empate
     if step.fourth_card_origin
-      current_chair = step.fourth_card_origin.split("---")[1] # Extraindo "chair_a", "chair_b", etc.
-      current_chair_letter = current_chair[-1].upcase # Obtendo apenas a letra da cadeira (A, B, C, D)
-
-      # Ordem natural das cadeiras
+      current_chair = step.fourth_card_origin.split("---")[1]
+      current_chair_letter = current_chair[-1].upcase
       chair_order = %w[A D B C]
-
-      # Encontrando a próxima cadeira na ordem natural
       next_chair = chair_order[(chair_order.index(current_chair_letter) + 1) % chair_order.length]
-
-      # Definindo o próximo jogador
       next_player_name = @game.room.send("chair_#{next_chair.downcase}")
-      step.update(first: "EMPACHE", player_time: next_player_name)
+      step.update(player_time: next_player_name)
     else
       render json: { error: "Unable to determine next chair" }, status: :unprocessable_entity
       return
@@ -175,24 +185,25 @@ def determine_round_winner(step)
     return # Finaliza a execução para evitar operações adicionais com `nil`
   end
 
-  # Salva o vencedor no campo apropriado (first ou second), garantindo que strongest_card_origin não seja nil
+  # Salva o vencedor no campo apropriado (first, second ou third)
   if step.first.nil?
     step.update(
       first: winner_team,
-      player_time: strongest_card_origin&.split("---")&.fetch(3, nil) # Extrai o nome do jogador com a carta mais forte
+      player_time: strongest_card_origin&.split("---")&.fetch(3, nil)
     )
   elsif step.second.nil?
     step.update(
       second: winner_team,
-      player_time: strongest_card_origin&.split("---")&.fetch(3, nil) # Extrai o nome do jogador com a carta mais forte
+      player_time: strongest_card_origin&.split("---")&.fetch(3, nil)
     )
   else
     step.update(
       third: winner_team,
-      player_time: strongest_card_origin&.split("---")&.fetch(3, nil) # Extrai o nome do jogador com a carta mais forte
+      player_time: strongest_card_origin&.split("---")&.fetch(3, nil)
     )
   end
 end
+
 
 
 ##############################################################################################################################################
@@ -265,32 +276,39 @@ def handle_collect(step, player_chair)
     elsif step.win == "ELES"
       game.increment!(:score_them)
     end
-    player_time_before = step.player_time
-    # Apaga o step atual para iniciar um novo round
-    step.destroy
 
-    # Criar um novo step para o próximo round no mesmo jogo
+    # Reinicia o step atual para o próximo round em vez de destruí-lo
     deck = Step.generate_deck.shuffle
     cards_chair_a, cards_chair_b, cards_chair_c, cards_chair_d = deck.shift(3), deck.shift(3), deck.shift(3), deck.shift(3)
     vira = deck.shift
 
-    new_step = Step.new(
-      game_id: game.uuid,
-      number: step.number + 1,
+    # Atualiza o step existente com as novas cartas, vira e limpa os campos de origem
+    step.update(
       cards_chair_a: cards_chair_a,
       cards_chair_b: cards_chair_b,
       cards_chair_c: cards_chair_c,
       cards_chair_d: cards_chair_d,
       table_cards: [],
       vira: vira,
-      player_time: player_time_before
+      first_card_origin: nil,
+      second_card_origin: nil,
+      third_card_origin: nil,
+      fourth_card_origin: nil,
+      first: nil,
+      second: nil,
+      third: nil,
+      player_call_3: nil,
+      player_call_6: nil,
+      player_call_9: nil,
+      player_call_12: nil,
+      win: nil
     )
 
-    if new_step.save
-      Rails.logger.info "Novo step criado para o jogo #{game.uuid} com o ID #{new_step.id}"
-      render json: { message: "Ponto computado e novo round iniciado", step_id: new_step.id }, status: :ok
+    if step.errors.any?
+      render json: { error: "Falha ao reiniciar round", details: step.errors.full_messages }, status: :internal_server_error
     else
-      render json: { error: "Falha ao criar novo round", details: new_step.errors.full_messages }, status: :internal_server_error
+      Rails.logger.info "Round reiniciado para o jogo #{game.uuid} com o ID #{step.id}"
+      render json: { message: "Ponto computado e round reiniciado", step_id: step.id }, status: :ok
     end
   else
     # Se não houver vencedor, apenas limpa as cartas e origens do step atual
@@ -306,13 +324,14 @@ def handle_collect(step, player_chair)
   end
 end
 
+
 def determine_game_winner(step)
   # Regra 1: Se o mesmo time vence as duas primeiras rodadas, ele é o vencedor
   if step.first && step.second && step.first == step.second
     step.update(win: step.first)
 
   # Regra 2: Se um time ganha a primeira e a segunda rodada é empachada, o time que ganhou a primeira vence
-  elsif step.first && step.second && step.second == "EMPACHE"
+  elsif step.first && step.second == "EMPACHE"
     step.update(win: step.first)
 
   # Regra 3: Se um time vence a primeira rodada e o outro vence a segunda, o time que ganhar a terceira vence o jogo
