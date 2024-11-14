@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2024_11_12_235635) do
+ActiveRecord::Schema[7.2].define(version: 2024_11_13_212847) do
   create_table "games", primary_key: "uuid", id: :string, force: :cascade do |t|
     t.string "room_id", null: false
     t.integer "score_us", default: 0
@@ -78,6 +78,7 @@ ActiveRecord::Schema[7.2].define(version: 2024_11_12_235635) do
     t.string "third_card_origin"
     t.string "fourth_card_origin"
     t.string "win", limit: 4
+    t.string "third"
     t.index ["game_id"], name: "index_steps_on_game_id"
   end
 

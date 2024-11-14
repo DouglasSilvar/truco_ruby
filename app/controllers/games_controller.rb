@@ -103,9 +103,9 @@ class GamesController < ApplicationController
     elsif step.fourth_card_origin.nil?
     step.update(fourth_card_origin: card_origin_record)
 
-    
 
-  end
+
+    end
 
 # Se todas as quatro colunas de origem estiverem preenchidas, não definir o próximo jogador
 if step.fourth_card_origin.nil?
@@ -181,9 +181,14 @@ def determine_round_winner(step)
       first: winner_team,
       player_time: strongest_card_origin&.split("---")&.fetch(3, nil) # Extrai o nome do jogador com a carta mais forte
     )
-  else
+  elsif step.second.nil?
     step.update(
       second: winner_team,
+      player_time: strongest_card_origin&.split("---")&.fetch(3, nil) # Extrai o nome do jogador com a carta mais forte
+    )
+  else
+    step.update(
+      third: winner_team,
       player_time: strongest_card_origin&.split("---")&.fetch(3, nil) # Extrai o nome do jogador com a carta mais forte
     )
   end
@@ -260,7 +265,7 @@ def handle_collect(step, player_chair)
     elsif step.win == "ELES"
       game.increment!(:score_them)
     end
-
+    player_time_before = step.player_time
     # Apaga o step atual para iniciar um novo round
     step.destroy
 
@@ -278,7 +283,7 @@ def handle_collect(step, player_chair)
       cards_chair_d: cards_chair_d,
       table_cards: [],
       vira: vira,
-      player_time: game.room.chair_a # Reinicia o jogador a partir da cadeira A
+      player_time: player_time_before
     )
 
     if new_step.save
@@ -302,21 +307,33 @@ def handle_collect(step, player_chair)
 end
 
 def determine_game_winner(step)
-  # Regra 1: Verifica se o mesmo time venceu a primeira e a segunda rodadas
+  # Regra 1: Se o mesmo time vence as duas primeiras rodadas, ele é o vencedor
   if step.first && step.second && step.first == step.second
     step.update(win: step.first)
-  # Regra 2: Se a primeira rodada foi EMPACHADA e a segunda tem um vencedor, esse time vence
+
+  # Regra 2: Se um time ganha a primeira e a segunda rodada é empachada, o time que ganhou a primeira vence
+  elsif step.first && step.second && step.second == "EMPACHE"
+    step.update(win: step.first)
+
+  # Regra 3: Se um time vence a primeira rodada e o outro vence a segunda, o time que ganhar a terceira vence o jogo
+  elsif step.first && step.second && step.first != step.second
+    if step.third.nil?
+      # Ainda não há um vencedor, aguardando o resultado da terceira rodada
+    elsif step.third == "EMPACHE"
+      # Se a terceira rodada é empachada, o time que venceu a primeira rodada é o vencedor
+      step.update(win: step.first)
+    else
+      # Caso contrário, o time que venceu a terceira rodada é o vencedor
+      step.update(win: step.third)
+    end
+
+  # Regra 4: Se a primeira rodada é empachada, o time que vencer a segunda rodada vence o jogo
   elsif step.first == "EMPACHE" && step.second
     step.update(win: step.second)
-  # Regra 3: Se a primeira rodada foi vencida por um time e a segunda foi EMPACHADA, o time que ganhou a primeira vence
-  elsif step.first && step.second == "EMPACHE"
-    step.update(win: step.first)
-  # Regra 4: Se todas as três rodadas (implícito na sequência) empacharem, o jogo termina sem vencedor
-  elsif step.first == "EMPACHE" && step.second == "EMPACHE"
+
+  # Regra 5: Se todas as três rodadas terminam em empache, o jogo termina sem vencedor
+  elsif step.first == "EMPACHE" && step.second == "EMPACHE" && step.third == "EMPACHE"
     step.update(win: "EMPT")
   end
 end
-
-
-  ####################################################################################################
 end
