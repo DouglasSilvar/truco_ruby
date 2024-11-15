@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2024_11_13_212847) do
+ActiveRecord::Schema[7.2].define(version: 2024_11_15_120712) do
   create_table "games", primary_key: "uuid", id: :string, force: :cascade do |t|
     t.string "room_id", null: false
     t.integer "score_us", default: 0
@@ -18,6 +18,8 @@ ActiveRecord::Schema[7.2].define(version: 2024_11_13_212847) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.json "game_show", default: {}
+    t.boolean "end", default: false
+    t.string "end_game_win"
     t.index ["room_id"], name: "index_games_on_room_id"
   end
 

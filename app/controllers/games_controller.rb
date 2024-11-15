@@ -277,33 +277,32 @@ def handle_collect(step, player_chair)
       game.increment!(:score_them)
     end
 
-    # Reinicia o step atual para o próximo round em vez de destruí-lo
-    deck = Step.generate_deck.shuffle
-    cards_chair_a, cards_chair_b, cards_chair_c, cards_chair_d = deck.shift(3), deck.shift(3), deck.shift(3), deck.shift(3)
-    vira = deck.shift
+    # Verifica se o placar atingiu ou excedeu 12 pontos
+    winner = if game.score_us >= 12
+               "NOS"
+    elsif game.score_them >= 12
+               "ELES"
+    end
 
-    # Atualiza o step existente com as novas cartas, vira e limpa os campos de origem
-    step.update(
-      cards_chair_a: cards_chair_a,
-      cards_chair_b: cards_chair_b,
-      cards_chair_c: cards_chair_c,
-      cards_chair_d: cards_chair_d,
-      table_cards: [],
-      vira: vira,
-      first_card_origin: nil,
-      second_card_origin: nil,
-      third_card_origin: nil,
-      fourth_card_origin: nil,
-      first: nil,
-      second: nil,
-      third: nil,
-      player_call_3: nil,
-      player_call_6: nil,
-      player_call_9: nil,
-      player_call_12: nil,
-      win: nil
-    )
+    if winner
+      game.update(end_game_win: winner)
+      step.update(
+        table_cards: [],
+        first_card_origin: nil,
+        second_card_origin: nil,
+        third_card_origin: nil,
+        fourth_card_origin: nil,
+        win: nil
+      )
+      # Atualiza a coluna `game` na tabela `room` para nil
+      game.room.update(game: nil)
+      game.room.room_players.update_all(ready: false)
+      render json: { message: "Jogo finalizado. #{winner} venceu!", game_id: game.uuid }, status: :ok
+      return
+    end
 
+    # Reinicia o step atual para o próximo round
+    reset_step(step, Step.generate_deck.shuffle)
     if step.errors.any?
       render json: { error: "Falha ao reiniciar round", details: step.errors.full_messages }, status: :internal_server_error
     else
@@ -324,35 +323,59 @@ def handle_collect(step, player_chair)
   end
 end
 
+private
+
+def reset_step(step, deck = nil)
+  # Limpa os campos do step
+  step.update(
+    cards_chair_a: deck&.shift(3),
+    cards_chair_b: deck&.shift(3),
+    cards_chair_c: deck&.shift(3),
+    cards_chair_d: deck&.shift(3),
+    table_cards: [],
+    vira: deck&.shift,
+    first_card_origin: nil,
+    second_card_origin: nil,
+    third_card_origin: nil,
+    fourth_card_origin: nil,
+    first: nil,
+    second: nil,
+    third: nil,
+    player_call_3: nil,
+    player_call_6: nil,
+    player_call_9: nil,
+    player_call_12: nil,
+    win: nil
+  )
+end
+
 
 def determine_game_winner(step)
-  # Regra 1: Se o mesmo time vence as duas primeiras rodadas, ele é o vencedor
-  if step.first && step.second && step.first == step.second
-    step.update(win: step.first)
-
-  # Regra 2: Se um time ganha a primeira e a segunda rodada é empachada, o time que ganhou a primeira vence
-  elsif step.first && step.second == "EMPACHE"
-    step.update(win: step.first)
-
-  # Regra 3: Se um time vence a primeira rodada e o outro vence a segunda, o time que ganhar a terceira vence o jogo
-  elsif step.first && step.second && step.first != step.second
-    if step.third.nil?
-      # Ainda não há um vencedor, aguardando o resultado da terceira rodada
-    elsif step.third == "EMPACHE"
-      # Se a terceira rodada é empachada, o time que venceu a primeira rodada é o vencedor
-      step.update(win: step.first)
+  case
+  when step.first == "EMPACHE"
+    # Regra 4: Primeira rodada empachada, o vencedor é quem ganhou a segunda, ou a terceira decide se a segunda também é empachada.
+    case step.second
+    when "EMPACHE"
+      step.update(win: (step.third == "EMPACHE" ? "EMP" : step.third)) # Se terceira também é empachada, jogo sem vencedor, senão, terceira define.
     else
-      # Caso contrário, o time que venceu a terceira rodada é o vencedor
-      step.update(win: step.third)
+      step.update(win: step.second) # Se a segunda não é empachada, ela define o vencedor.
     end
 
-  # Regra 4: Se a primeira rodada é empachada, o time que vencer a segunda rodada vence o jogo
-  elsif step.first == "EMPACHE" && step.second
-    step.update(win: step.second)
+  when step.first && step.second == "EMPACHE"
+    # Regra 2: Primeira rodada ganha, segunda empachada, primeira define o vencedor.
+    step.update(win: step.first)
 
-  # Regra 5: Se todas as três rodadas terminam em empache, o jogo termina sem vencedor
-  elsif step.first == "EMPACHE" && step.second == "EMPACHE" && step.third == "EMPACHE"
-    step.update(win: "EMPT")
+  when step.first && step.first == step.second
+    # Regra 1: O mesmo time vence as duas primeiras, ele é o vencedor.
+    step.update(win: step.first)
+
+  when step.first && step.first != step.second && step.second != "EMPACHE"
+    # Regra 3: Times diferentes ganharam a primeira e a segunda rodada, a terceira decide.
+    step.update(win: (step.third == "EMPACHE" ? step.first : step.third)) # Se a terceira é empachada, primeiro vencedor ganha, senão, terceira define.
+
+  when step.first == "EMPACHE" && step.second == "EMPACHE" && step.third == "EMPACHE"
+    # Regra 5: Todas as rodadas são empachadas, o jogo termina sem vencedor.
+    step.update(win: "EMP")
   end
 end
 end
