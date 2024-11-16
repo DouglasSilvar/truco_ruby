@@ -79,27 +79,35 @@ class GamesController < ApplicationController
 
     Rails.logger.info "Player #{player_name} plays card: #{card}, coverup: #{coverup}, accept: #{accept}, call: #{call}"
 
+    # Define o valor da carta a ser salva na mesa e na origem
+    card_to_save = coverup ? "EC" : card
+    Rails.logger.info "Passou aqui 1"
     if call && ![ 3, 6, 9, 12 ].include?(call)
       render json: { error: "Invalid truco call" }, status: :unprocessable_entity
       return
     end
-
+    Rails.logger.info "Passou aqui 2"
     # Move card to table_cards and remove it from player's hand
-    step.table_cards << card
+    step.table_cards << card_to_save
+    Rails.logger.info "Passou aqui 3"
     step.update(table_cards: step.table_cards)
+    Rails.logger.info "Passou aqui 4"
     player_cards = step.send("cards_#{player_chair}")
+    Rails.logger.info "Passou aqui 5"
     player_cards.delete(card)
+    Rails.logger.info "Passou aqui 6"
     step.update("cards_#{player_chair}" => player_cards)
+    Rails.logger.info "Passou aqui 7"
 
 
     # Determine the team based on the player's chair
     player_chair_modified = player_chair.strip.upcase[-1]  # Pega a última letra de player_chair (A, B, etc.)
     puts "Valor ajustado de player_chair: #{player_chair}"  # Verifica o valor exato
-
+    Rails.logger.info "Passou aqui 8"
     team = %w[A B].include?(player_chair_modified) ? "NOS" : "ELES"
-    card_origin_record = "#{card}---#{player_chair}---#{team}---#{player_name}"
+    card_origin_record = "#{card_to_save}---#{player_chair}---#{team}---#{player_name}"
     puts "Resultado de card_origin_record: #{card_origin_record}"
-
+    Rails.logger.info "Passou aqui 9"
     # Save card origin in the first available column
     if step.first_card_origin.nil?
      step.update(first_card_origin: card_origin_record)
@@ -109,7 +117,7 @@ class GamesController < ApplicationController
      step.update(third_card_origin: card_origin_record)
     elsif step.fourth_card_origin.nil?
     step.update(fourth_card_origin: card_origin_record)
-
+      Rails.logger.info "Passou aqui 10"
 
 
     end
@@ -122,11 +130,11 @@ if step.fourth_card_origin.nil?
   next_player_name = @game.room.send("chair_#{next_chair.downcase}")
   step.update(player_time: next_player_name)
 end
-
+Rails.logger.info "Passou aqui 11"
 # Determina o vencedor da rodada
 determine_round_winner(step)
 determine_game_winner(step)
-
+Rails.logger.info "Passou aqui 12"
 head :ok
     end
   end
@@ -248,7 +256,7 @@ end
 # Calcula a força de uma carta considerando a MANIA e hierarquia de naipes
 def calculate_card_strength(card, mania_card, hierarchy, chair)
   # Hierarquia básica de força
-
+  return 0 if card == "EC"
   card_value = card[0..-2] # Remove o último caractere (naipe) da carta
   base_strength = hierarchy.index(card_value)
   Rails.logger.info "mania_card: #{mania_card}"

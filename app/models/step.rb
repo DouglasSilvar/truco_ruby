@@ -31,8 +31,9 @@ class Step < ApplicationRecord
           errors.add(chair, "contains invalid cards")
         end
       end
-  
-      if (table_cards - CARTAS_VALIDAS).any?
+    
+      # Permitir "EC" apenas em table_cards
+      if (table_cards - (CARTAS_VALIDAS + ["EC"])).any?
         errors.add(:table_cards, "contain invalid cards")
       end
     end
@@ -46,6 +47,11 @@ class Step < ApplicationRecord
         unless player_cards.all? { |card| CARTAS_VALIDAS.include?(card) }
           errors.add(chair, "must be in the correct format")
         end
+      end
+    
+      # Validar table_cards, permitindo "EC" além das cartas válidas
+      unless table_cards.all? { |card| CARTAS_VALIDAS.include?(card) || card == "EC" }
+        errors.add(:table_cards, "must be in the correct format")
       end
     end
   
