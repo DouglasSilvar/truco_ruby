@@ -66,6 +66,11 @@ class GamesController < ApplicationController
       handle_collect(step, player_chair)
     else
 
+    if call
+      handle_truco_call(step, call, player_name)
+      return
+    end
+
     if step.player_time != player_name
       render json: { error: "Not your turn" }, status: :forbidden
       return
@@ -76,38 +81,23 @@ class GamesController < ApplicationController
       return
     end
 
-
-    Rails.logger.info "Player #{player_name} plays card: #{card}, coverup: #{coverup}, accept: #{accept}, call: #{call}"
-
     # Define o valor da carta a ser salva na mesa e na origem
     card_to_save = coverup ? "EC" : card
-    Rails.logger.info "Passou aqui 1"
     if call && ![ 3, 6, 9, 12 ].include?(call)
       render json: { error: "Invalid truco call" }, status: :unprocessable_entity
       return
     end
-    Rails.logger.info "Passou aqui 2"
     # Move card to table_cards and remove it from player's hand
     step.table_cards << card_to_save
-    Rails.logger.info "Passou aqui 3"
     step.update(table_cards: step.table_cards)
-    Rails.logger.info "Passou aqui 4"
     player_cards = step.send("cards_#{player_chair}")
-    Rails.logger.info "Passou aqui 5"
     player_cards.delete(card)
-    Rails.logger.info "Passou aqui 6"
     step.update("cards_#{player_chair}" => player_cards)
-    Rails.logger.info "Passou aqui 7"
-
 
     # Determine the team based on the player's chair
     player_chair_modified = player_chair.strip.upcase[-1]  # Pega a última letra de player_chair (A, B, etc.)
-    puts "Valor ajustado de player_chair: #{player_chair}"  # Verifica o valor exato
-    Rails.logger.info "Passou aqui 8"
     team = %w[A B].include?(player_chair_modified) ? "NOS" : "ELES"
     card_origin_record = "#{card_to_save}---#{player_chair}---#{team}---#{player_name}"
-    puts "Resultado de card_origin_record: #{card_origin_record}"
-    Rails.logger.info "Passou aqui 9"
     # Save card origin in the first available column
     if step.first_card_origin.nil?
      step.update(first_card_origin: card_origin_record)
@@ -117,25 +107,20 @@ class GamesController < ApplicationController
      step.update(third_card_origin: card_origin_record)
     elsif step.fourth_card_origin.nil?
     step.update(fourth_card_origin: card_origin_record)
-      Rails.logger.info "Passou aqui 10"
-
-
     end
 
-# Se todas as quatro colunas de origem estiverem preenchidas, não definir o próximo jogador
-if step.fourth_card_origin.nil?
-  # Determine next player in sequence A -> D -> B -> C -> A
-  chair_order = %w[A D B C]
-  next_chair = chair_order[(chair_order.index(player_chair[-1].upcase) + 1) % chair_order.length]
-  next_player_name = @game.room.send("chair_#{next_chair.downcase}")
-  step.update(player_time: next_player_name)
-end
-Rails.logger.info "Passou aqui 11"
-# Determina o vencedor da rodada
-determine_round_winner(step)
-determine_game_winner(step)
-Rails.logger.info "Passou aqui 12"
-head :ok
+    # Se todas as quatro colunas de origem estiverem preenchidas, não definir o próximo jogador
+    if step.fourth_card_origin.nil?
+      # Determine next player in sequence A -> D -> B -> C -> A
+      chair_order = %w[A D B C]
+      next_chair = chair_order[(chair_order.index(player_chair[-1].upcase) + 1) % chair_order.length]
+      next_player_name = @game.room.send("chair_#{next_chair.downcase}")
+      step.update(player_time: next_player_name)
+    end
+      # Determina o vencedor da rodada
+      determine_round_winner(step)
+      determine_game_winner(step)
+      head :ok
     end
   end
 
@@ -259,17 +244,12 @@ def calculate_card_strength(card, mania_card, hierarchy, chair)
   return 0 if card == "EC"
   card_value = card[0..-2] # Remove o último caractere (naipe) da carta
   base_strength = hierarchy.index(card_value)
-  Rails.logger.info "mania_card: #{mania_card}"
-  Rails.logger.info "card: #{card}"
-  Rails.logger.info "hierarchy: #{hierarchy}"
-  Rails.logger.info "Base strength: #{base_strength}"
   # Se a carta for MANIA, ajuste a força com base no naipe
   if card_value == mania_card
     suit_order = %w[O E C Z]
     card_nipe = card[-1]
     base_strength = hierarchy.size + suit_order.index(card_nipe)
   end
-  Rails.logger.info "Base strength: #{base_strength}"
   base_strength
 end
 
@@ -314,7 +294,6 @@ def handle_collect(step, player_chair)
     if step.errors.any?
       render json: { error: "Falha ao reiniciar round", details: step.errors.full_messages }, status: :internal_server_error
     else
-      Rails.logger.info "Round reiniciado para o jogo #{game.uuid} com o ID #{step.id}"
       render json: { message: "Ponto computado e round reiniciado", step_id: step.id }, status: :ok
     end
   else
@@ -384,6 +363,55 @@ def determine_game_winner(step)
   when step.first == "EMPACHE" && step.second == "EMPACHE" && step.third == "EMPACHE"
     # Regra 5: Todas as rodadas são empachadas, o jogo termina sem vencedor.
     step.update(win: "EMP")
+  end
+end
+
+def handle_truco_call(step, call, player_name)
+  valid_calls = [ 3, 6, 9, 12 ] # Valores válidos para chamadas de truco
+  unless valid_calls.include?(call.to_i)
+    render json: { error: "Invalid truco call" }, status: :unprocessable_entity
+    return
+  end
+
+  # Determina o time do jogador com base na cadeira
+  player_chair = find_player_chair(step.game.room, player_name)
+  unless player_chair
+    render json: { error: "Player is not part of this game" }, status: :forbidden
+    return
+  end
+
+  team = %w[a b].include?(player_chair[-1].downcase) ? "NOS" : "ELES"
+  player_call_value = "#{player_name}---#{team}"
+
+  case call.to_i
+  when 3
+    if step.player_call_3.nil?
+      step.update(player_call_3: player_call_value, player_time: nil)
+      render json: { message: "Truco called at level 3 by #{player_name} (#{team})" }, status: :ok
+    else
+      render json: { error: "Level 3 already called" }, status: :unprocessable_entity
+    end
+  when 6
+    if step.player_call_6.nil?
+      step.update(player_call_6: player_call_value, player_time: nil)
+      render json: { message: "Truco called at level 6 by #{player_name} (#{team})" }, status: :ok
+    else
+      render json: { error: "Level 6 already called" }, status: :unprocessable_entity
+    end
+  when 9
+    if step.player_call_9.nil?
+      step.update(player_call_9: player_call_value, player_time: nil)
+      render json: { message: "Truco called at level 9 by #{player_name} (#{team})" }, status: :ok
+    else
+      render json: { error: "Level 9 already called" }, status: :unprocessable_entity
+    end
+  when 12
+    if step.player_call_12.nil?
+      step.update(player_call_12: player_call_value, player_time: nil)
+      render json: { message: "Truco called at level 12 by #{player_name} (#{team})" }, status: :ok
+    else
+      render json: { error: "Level 12 already called" }, status: :unprocessable_entity
+    end
   end
 end
 end
