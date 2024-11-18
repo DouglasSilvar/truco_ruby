@@ -46,7 +46,7 @@ class GamesController < ApplicationController
     accept = ActiveModel::Type::Boolean.new.cast(params[:accept])
     collect = ActiveModel::Type::Boolean.new.cast(params[:collect])
     call = params[:call]
-
+    puts "Card: #{card}, Coverup: #{coverup}, Accept: #{accept}, Collect: #{collect}, Call: #{call}"
     # Verifica se já há 4 cartas na mesa
     step = @game.steps.order(:number).last
        if card && step.table_cards.size >= 4
@@ -69,6 +69,26 @@ class GamesController < ApplicationController
     if call
       handle_truco_call(step, call, player_name)
       return
+    end
+
+    if accept == true || accept == false
+      # Valida se o player é válido e está no jogo
+      player_chair = find_player_chair(@game.room, player_name)
+      unless player_chair
+        render json: { error: "Player is not part of this game" }, status: :forbidden
+        return
+      end
+
+      # Verifica se alguma coluna de chamada de truco está preenchida
+      if step.player_call_3 || step.player_call_6 || step.player_call_9 || step.player_call_12
+        # Registra o valor em is_accept_first ou is_accept_second
+        register_accept_decision(step, player_name, accept)
+        head :ok
+        return
+      else
+        render json: { error: "No truco call to accept or reject" }, status: :unprocessable_entity
+        return
+      end
     end
 
     if step.player_time != player_name
@@ -412,6 +432,34 @@ def handle_truco_call(step, call, player_name)
     else
       render json: { error: "Level 12 already called" }, status: :unprocessable_entity
     end
+  end
+end
+
+def register_accept_decision(step, player_name, accept)
+  player_chair = find_player_chair(step.game.room, player_name)
+  unless player_chair
+    Rails.logger.info("Player #{player_name} is not part of this game. No action taken.")
+    return
+  end
+
+  # Determina o time com base na cadeira
+  team = %w[a b].include?(player_chair[-1].downcase) ? "NOS" : "ELES"
+  decision = "#{player_name}---#{accept ? 'yes' : 'no'}---#{team}"
+
+  if step.is_accept_first.nil?
+    # Salva no campo `is_accept_first` se ele estiver vazio
+    step.update(is_accept_first: decision)
+  elsif step.is_accept_second.nil?
+    # Verifica se o mesmo player já salvou no `is_accept_first`
+    existing_player = step.is_accept_first&.split('---')&.first
+    if existing_player != player_name
+      # Salva no campo `is_accept_second` se ele estiver vazio e não for duplicado
+      step.update(is_accept_second: decision)
+    else
+      Rails.logger.info("Player #{player_name} already registered in is_accept_first. No action taken.")
+    end
+  else
+    Rails.logger.info("Both is_accept_first and is_accept_second are already set. No action taken.")
   end
 end
 end
