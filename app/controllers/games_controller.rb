@@ -60,8 +60,6 @@ class GamesController < ApplicationController
         return
       end
 
-    step = @game.steps.order(:number).last
-
     if collect
       handle_collect(step, player_chair)
     else
@@ -278,12 +276,15 @@ def handle_collect(step, player_chair)
   if step.win && step.win != "EMPT"
     game = step.game # Obtem o jogo associado ao step atual
 
-    # Incrementa o placar com base no vencedor
-    if step.win == "NOS"
-      game.increment!(:score_us)
-    elsif step.win == "ELES"
-      game.increment!(:score_them)
-    end
+        # Define a pontuação com base nos parâmetros de truco
+        additional_points = calculate_additional_points(step)
+
+        # Incrementa o placar com base no vencedor e pontos calculados
+        if step.win == "NOS"
+          game.increment!(:score_us, additional_points)
+        elsif step.win == "ELES"
+          game.increment!(:score_them, additional_points)
+        end
 
     # Verifica se o placar atingiu ou excedeu 12 pontos
     winner = if game.score_us >= 12
@@ -352,6 +353,8 @@ def reset_step(step, deck = nil)
     player_call_6: nil,
     player_call_9: nil,
     player_call_12: nil,
+    is_accept_first: nil,
+    is_accept_second: nil,
     win: nil
   )
 end
@@ -413,21 +416,33 @@ def handle_truco_call(step, call, player_name)
     end
   when 6
     if step.player_call_6.nil?
-      step.update(player_call_6: player_call_value, player_time: nil)
+      step.update(
+        player_call_6: player_call_value,
+        is_accept_first: nil,
+        is_accept_second: nil,
+        player_time: nil)
       render json: { message: "Truco called at level 6 by #{player_name} (#{team})" }, status: :ok
     else
       render json: { error: "Level 6 already called" }, status: :unprocessable_entity
     end
   when 9
     if step.player_call_9.nil?
-      step.update(player_call_9: player_call_value, player_time: nil)
+      step.update(
+        player_call_9: player_call_value,
+        is_accept_first: nil,
+        is_accept_second: nil,
+        player_time: nil)
       render json: { message: "Truco called at level 9 by #{player_name} (#{team})" }, status: :ok
     else
       render json: { error: "Level 9 already called" }, status: :unprocessable_entity
     end
   when 12
     if step.player_call_12.nil?
-      step.update(player_call_12: player_call_value, player_time: nil)
+      step.update(
+        player_call_12: player_call_value,
+        is_accept_first: nil,
+        is_accept_second: nil,
+        player_time: nil)
       render json: { message: "Truco called at level 12 by #{player_name} (#{team})" }, status: :ok
     else
       render json: { error: "Level 12 already called" }, status: :unprocessable_entity
@@ -451,15 +466,59 @@ def register_accept_decision(step, player_name, accept)
     step.update(is_accept_first: decision)
   elsif step.is_accept_second.nil?
     # Verifica se o mesmo player já salvou no `is_accept_first`
-    existing_player = step.is_accept_first&.split('---')&.first
+    existing_player = step.is_accept_first&.split("---")&.first
     if existing_player != player_name
       # Salva no campo `is_accept_second` se ele estiver vazio e não for duplicado
       step.update(is_accept_second: decision)
+      handle_truco_decision(step)
     else
       Rails.logger.info("Player #{player_name} already registered in is_accept_first. No action taken.")
     end
   else
     Rails.logger.info("Both is_accept_first and is_accept_second are already set. No action taken.")
+  end
+end
+
+def handle_truco_decision(step)
+  # Extrai informações de quem pediu o truco
+  player_call_3_data = step.player_call_3.split("---")
+  truco_player = player_call_3_data[0] # Nome do jogador que pediu truco
+  truco_team = player_call_3_data[1]  # Nome do time que pediu truco
+
+  # Verifica a decisão do segundo jogador do time oposto
+  if step.is_accept_second.include?("---no")
+    # Atualiza a coluna 'win' com o time que pediu truco
+    step.update!(win: truco_team)
+
+    # Atualiza a coluna 'player_time' com o jogador que pediu truco
+    step.update!(player_time: truco_player)
+  elsif step.is_accept_second.include?("---yes")
+    # Apenas atualiza o jogador que pediu truco como próximo a jogar
+    step.update!(player_time: truco_player)
+  end
+end
+
+
+def calculate_additional_points(step)
+  puts "Calculating points for step: #{step.inspect}"
+
+  # Prioriza o menor valor de truco primeiro
+  case
+  when step.player_call_3.present?
+    puts "player_call_3 detected: #{step.player_call_3.inspect}"
+    step.is_accept_second.include?("---yes") ? 3 : 1
+  when step.player_call_6.present?
+    puts "player_call_6 detected: #{step.player_call_6.inspect}"
+    step.is_accept_second.include?("---yes") ? 6 : 3
+  when step.player_call_9.present?
+    puts "player_call_9 detected: #{step.player_call_9.inspect}"
+    step.is_accept_second.include?("---yes") ? 9 : 6
+  when step.player_call_12.present?
+    puts "player_call_12 detected: #{step.player_call_12.inspect}"
+    step.is_accept_second.include?("---yes") ? 12 : 9
+  else
+    puts "No player_call found, returning default 1"
+    1
   end
 end
 end
