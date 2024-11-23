@@ -480,23 +480,36 @@ def register_accept_decision(step, player_name, accept)
 end
 
 def handle_truco_decision(step)
-  # Extrai informações de quem pediu o truco
-  player_call_3_data = step.player_call_3.split("---")
-  truco_player = player_call_3_data[0] # Nome do jogador que pediu truco
-  truco_team = player_call_3_data[1]  # Nome do time que pediu truco
+  # Determina o último jogador que fez uma chamada de truco
+  truco_calls = [
+    step.player_call_12,
+    step.player_call_9,
+    step.player_call_6,
+    step.player_call_3
+  ]
+
+  last_truco_call = truco_calls.compact.first # Pega a chamada mais prioritária (12 > 9 > 6 > 3)
+
+  if last_truco_call
+    # Extrai informações do jogador que fez a última chamada
+    player_data = last_truco_call.split("---")
+    truco_player = player_data[0] # Nome do jogador que pediu truco
+    truco_team = player_data[1]   # Nome do time que pediu truco
+  end
 
   # Verifica a decisão do segundo jogador do time oposto
   if step.is_accept_second.include?("---no")
     # Atualiza a coluna 'win' com o time que pediu truco
     step.update!(win: truco_team)
 
-    # Atualiza a coluna 'player_time' com o jogador que pediu truco
+    # Atualiza a coluna 'player_time' com o último jogador que pediu truco
     step.update!(player_time: truco_player)
   elsif step.is_accept_second.include?("---yes")
-    # Apenas atualiza o jogador que pediu truco como próximo a jogar
+    # Apenas atualiza o último jogador que pediu truco como próximo a jogar
     step.update!(player_time: truco_player)
   end
 end
+
 
 
 def calculate_additional_points(step)
@@ -504,18 +517,18 @@ def calculate_additional_points(step)
 
   # Prioriza o menor valor de truco primeiro
   case
-  when step.player_call_3.present?
-    puts "player_call_3 detected: #{step.player_call_3.inspect}"
-    step.is_accept_second.include?("---yes") ? 3 : 1
-  when step.player_call_6.present?
-    puts "player_call_6 detected: #{step.player_call_6.inspect}"
-    step.is_accept_second.include?("---yes") ? 6 : 3
-  when step.player_call_9.present?
-    puts "player_call_9 detected: #{step.player_call_9.inspect}"
-    step.is_accept_second.include?("---yes") ? 9 : 6
   when step.player_call_12.present?
-    puts "player_call_12 detected: #{step.player_call_12.inspect}"
+    puts "player_call_3 detected: #{step.player_call_3.inspect}"
     step.is_accept_second.include?("---yes") ? 12 : 9
+  when step.player_call_9.present?
+    puts "player_call_6 detected: #{step.player_call_6.inspect}"
+    step.is_accept_second.include?("---yes") ? 9 : 6
+  when step.player_call_6.present?
+    puts "player_call_9 detected: #{step.player_call_9.inspect}"
+    step.is_accept_second.include?("---yes") ? 6 : 3
+  when step.player_call_3.present?
+    puts "player_call_12 detected: #{step.player_call_12.inspect}"
+    step.is_accept_second.include?("---yes") ? 3 : 1
   else
     puts "No player_call found, returning default 1"
     1
