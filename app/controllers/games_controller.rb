@@ -7,9 +7,12 @@ class GamesController < ApplicationController
     game = Game.find_by(uuid: params[:uuid])
 
     if game
+      # Verifica se o solicitante é um jogador
       player_chair = find_player_chair(game.room, player_name)
-      unless player_chair
-        render json: { error: "Player is not part of this game" }, status: :forbidden
+
+      # Permitir telespectadores
+      unless player_chair || authenticated_user?(player_name)
+        render json: { error: "User is not authorized to view this game" }, status: :forbidden
         return
       end
 
@@ -21,8 +24,17 @@ class GamesController < ApplicationController
       end
 
       step_data = step.as_json
-      %w[cards_chair_a cards_chair_b cards_chair_c cards_chair_d].each do |chair|
-        step_data[chair] = (chair == "cards_#{player_chair}") ? step.send(chair) : []
+
+      if player_chair
+        # Jogador: exibe apenas as cartas do jogador
+        %w[cards_chair_a cards_chair_b cards_chair_c cards_chair_d].each do |chair|
+          step_data[chair] = (chair == "cards_#{player_chair}") ? step.send(chair) : []
+        end
+      else
+        # Telespectador: remove os arrays de cartas
+        %w[cards_chair_a cards_chair_b cards_chair_c cards_chair_d].each do |chair|
+          step_data.delete(chair)
+        end
       end
 
       # Adiciona o owner da sala ao JSON
@@ -37,6 +49,7 @@ class GamesController < ApplicationController
       render json: { error: "Game not found" }, status: :not_found
     end
   end
+
 
 
   def play_move

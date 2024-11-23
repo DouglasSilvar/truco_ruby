@@ -18,6 +18,10 @@ class ApplicationController < ActionController::API
         render json: { error: "Invalid player credentials" }, status: :unauthorized
       end
     end
+
+    def authenticated_user?(name)
+      Player.exists?(name: name)
+    end
 end
 # rails db:truncate_all
 # rails server -b 0.0.0.0
