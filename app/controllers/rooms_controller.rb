@@ -294,7 +294,6 @@ class RoomsController < ApplicationController
 
       # Verifica o número de jogadores prontos, excluindo o owner
       ready_players_count = @room.room_players.where.not(player_id: @room.owner.uuid).where(ready: true, kick: false).count
-      Rails.logger.info "Number of ready players (excluding owner): #{ready_players_count}"
 
       if ready_players_count != 3
         render json: { error: "Game cannot be started. There must be 3 players ready, excluding the owner." }, status: :unprocessable_entity
@@ -308,17 +307,9 @@ class RoomsController < ApplicationController
       # Criar a entrada na tabela de jogos e verificar sucesso
       game = Game.new(uuid: game_id, room_id: @room.uuid)
       if game.save
-        # Gerar e distribuir o baralho
-        deck = Step.generate_deck.shuffle
-        Rails.logger.debug "Generated deck: #{deck.inspect}"
-        Rails.logger.info "Game created with UUID: #{game.uuid}"
-
         # Distribuir 3 cartas para cada jogador e definir a 'vira'
         cards_chair_a, cards_chair_b, cards_chair_c, cards_chair_d = deck.shift(3), deck.shift(3), deck.shift(3), deck.shift(3)
         vira = deck.shift # Define a carta 'vira' aleatoriamente
-
-        # Agora que as cartas foram atribuídas, registre o log
-        Rails.logger.info "Cards Chair A: #{cards_chair_a}, Cards Chair B: #{cards_chair_b}, Cards Chair C: #{cards_chair_c}, Cards Chair D: #{cards_chair_d}"
 
         # Criar o primeiro step para o jogo
         step = Step.new(

@@ -40,10 +40,8 @@ class Step < ApplicationRecord
 
     # Validação para verificar o formato de cada carta em cards_chair_a até cards_chair_d
     def cards_format
-      Rails.logger.info "Entering cards_format validation"
       %i[cards_chair_a cards_chair_b cards_chair_c cards_chair_d].each do |chair|
         player_cards = send(chair)
-        Rails.logger.info "Validating cards for #{chair}: #{player_cards.inspect}"
         unless player_cards.all? { |card| CARTAS_VALIDAS.include?(card) }
           errors.add(chair, "must be in the correct format")
         end

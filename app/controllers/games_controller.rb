@@ -432,7 +432,6 @@ end
 def register_accept_decision(step, player_name, accept)
   player_chair = find_player_chair(step.game.room, player_name)
   unless player_chair
-    Rails.logger.info("Player #{player_name} is not part of this game. No action taken.")
     return
   end
 
@@ -451,10 +450,8 @@ def register_accept_decision(step, player_name, accept)
       step.update(is_accept_second: decision)
       handle_truco_decision(step)
     else
-      Rails.logger.info("Player #{player_name} already registered in is_accept_first. No action taken.")
     end
   else
-    Rails.logger.info("Both is_accept_first and is_accept_second are already set. No action taken.")
   end
 end
 
