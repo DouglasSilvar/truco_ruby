@@ -481,12 +481,25 @@ def handle_truco_decision(step)
     # Atualiza a coluna 'player_time' com o último jogador que pediu truco
     step.update!(player_time: truco_player)
   elsif step.is_accept_second.include?("---yes")
-    # Apenas atualiza o último jogador que pediu truco como próximo a jogar
-    step.update!(player_time: truco_player)
+    # Verifica se há cartas na mesa ou em seus campos correspondentes
+    if step.table_cards.any? || [step.first_card_origin, step.second_card_origin, step.third_card_origin, step.fourth_card_origin].any?
+      # Há cartas na mesa, calcula o próximo jogador na sequência
+      last_card_origin = [step.fourth_card_origin, step.third_card_origin, step.second_card_origin, step.first_card_origin].compact.first
+      if last_card_origin
+        last_player_chair = last_card_origin.split("---")[1] # Extrai a cadeira do último jogador que jogou
+        chair_order = %w[A D B C]
+        next_chair = chair_order[(chair_order.index(last_player_chair[-1].upcase) + 1) % chair_order.length]
+        next_player_name = step.game.room.send("chair_#{next_chair.downcase}")
+        step.update!(player_time: next_player_name)
+      else
+        raise "Erro ao determinar a próxima cadeira na sequência"
+      end
+    else
+      # Não há cartas na mesa, mantém a lógica antiga
+      step.update!(player_time: truco_player)
+    end
   end
 end
-
-
 
 def calculate_additional_points(step)
   puts "Calculating points for step: #{step.inspect}"
