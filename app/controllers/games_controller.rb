@@ -1,52 +1,16 @@
 class GamesController < ApplicationController
-  before_action :authenticate_player, only: [ :show, :play_move ]
-  before_action :set_game, only: [ :show, :play_move, :call, :collect ]
+  before_action :authenticate_player, only: [:show, :play_move]
+  before_action :set_game, only: [:show, :play_move, :call, :collect]
 
   def show
     player_name = request.headers["name"]
-    game = Game.find_by(uuid: params[:uuid])
+    service = GameService.new(@game, player_name)
+    result = service.show_game
 
-    if game
-      # Verifica se o solicitante é um jogador
-      player_chair = find_player_chair(game.room, player_name)
-
-      # Permitir telespectadores
-      unless player_chair || authenticated_user?(player_name)
-        render json: { error: "User is not authorized to view this game" }, status: :forbidden
-        return
-      end
-
-      # Carregar o último `step` do jogo
-      step = game.steps.order(:number).last
-      if step.nil?
-        render json: { error: "No step available for this game" }, status: :not_found
-        return
-      end
-
-      step_data = step.as_json
-
-      if player_chair
-        # Jogador: exibe apenas as cartas do jogador
-        %w[cards_chair_a cards_chair_b cards_chair_c cards_chair_d].each do |chair|
-          step_data[chair] = (chair == "cards_#{player_chair}") ? step.send(chair) : []
-        end
-      else
-        # Telespectador: remove os arrays de cartas
-        %w[cards_chair_a cards_chair_b cards_chair_c cards_chair_d].each do |chair|
-          step_data.delete(chair)
-        end
-      end
-
-      # Adiciona o owner da sala ao JSON
-      owner_data = { name: game.room.owner.name } if game.room.owner
-
-      render json: game.as_json_with_chairs.merge(
-        step: step_data,
-        room_name: game.room.name,
-        owner: owner_data
-      )
+    if result[:error]
+      render json: { error: result[:error] }, status: result[:status]
     else
-      render json: { error: "Game not found" }, status: :not_found
+      render json: result
     end
   end
 
