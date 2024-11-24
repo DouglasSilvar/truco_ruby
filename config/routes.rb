@@ -12,4 +12,6 @@ Rails.application.routes.draw do
 
   resources :games, only: [ :show ], param: :uuid
   post "/games/:uuid/play_move", to: "games#play_move"
+  post "/games/:uuid/call", to: "games#call"
+  post "/games/:uuid/collect", to: "games#collect"
 end

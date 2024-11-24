@@ -1,6 +1,6 @@
 class GamesController < ApplicationController
   before_action :authenticate_player, only: [ :show, :play_move ]
-  before_action :set_game, only: [ :show, :play_move ]
+  before_action :set_game, only: [ :show, :play_move, :call, :collect ]
 
   def show
     player_name = request.headers["name"]
@@ -50,32 +50,41 @@ class GamesController < ApplicationController
     end
   end
 
-
-
   def play_move
-    player_name = request.headers["name"]
     card = params[:card]
     coverup = ActiveModel::Type::Boolean.new.cast(params[:coverup])
-    accept = ActiveModel::Type::Boolean.new.cast(params[:accept])
-    collect = ActiveModel::Type::Boolean.new.cast(params[:collect])
-    call = params[:call]
-    puts "Card: #{card}, Coverup: #{coverup}, Accept: #{accept}, Collect: #{collect}, Call: #{call}"
-    # Verifica se já há 4 cartas na mesa
-    step = @game.steps.order(:number).last
-       if card && step.table_cards.size >= 4
-        render json: { error: "Cannot play card, table already has 4 cards" }, status: :forbidden
-        return
-       end
 
-      player_chair = find_player_chair(@game.room, player_name)
-      unless player_chair
-         render json: { error: "Player is not part of this game" }, status: :forbidden
+    step = current_step
+    player_name = request.headers["name"]
+
+    unless valid_player?(player_name)
+      render json: { error: "Player is not part of this game" }, status: :forbidden
+      return
+    end
+
+    if card
+      if step.table_cards.size >= 4
+        render json: { error: "Cannot play card, table already has 4 cards" }, status: :forbidden
         return
       end
 
-    if collect
-      handle_collect(step, player_chair)
-    else
+      unless step.send("cards_#{find_player_chair(@game.room, player_name)}").include?(card)
+        render json: { error: "Invalid card or card not in player's hand" }, status: :unprocessable_entity
+        return
+      end
+
+      play_card(step, player_name, card, coverup)
+    end
+
+    head :ok
+  end
+
+  def call
+    accept = ActiveModel::Type::Boolean.new.cast(params[:accept])
+    call = params[:call]
+    player_name = request.headers["name"]
+
+    step = current_step
 
     if call
       handle_truco_call(step, call, player_name)
@@ -83,16 +92,12 @@ class GamesController < ApplicationController
     end
 
     if accept == true || accept == false
-      # Valida se o player é válido e está no jogo
-      player_chair = find_player_chair(@game.room, player_name)
-      unless player_chair
+      unless valid_player?(player_name)
         render json: { error: "Player is not part of this game" }, status: :forbidden
         return
       end
 
-      # Verifica se alguma coluna de chamada de truco está preenchida
-      if step.player_call_3 || step.player_call_6 || step.player_call_9 || step.player_call_12
-        # Registra o valor em is_accept_first ou is_accept_second
+      if truco_call_pending?(step)
         register_accept_decision(step, player_name, accept)
         head :ok
         return
@@ -101,57 +106,18 @@ class GamesController < ApplicationController
         return
       end
     end
+  end
 
-    if step.player_time != player_name
-      render json: { error: "Not your turn" }, status: :forbidden
-      return
-    end
+  def collect
+    collect = ActiveModel::Type::Boolean.new.cast(params[:collect])
+    player_name = request.headers["name"]
 
-    if card && !step.send("cards_#{player_chair}").include?(card)
-      render json: { error: "Invalid card or card not in player's hand" }, status: :unprocessable_entity
-      return
-    end
+    step = current_step
 
-    # Define o valor da carta a ser salva na mesa e na origem
-    card_to_save = coverup ? "EC" : card
-    if call && ![ 3, 6, 9, 12 ].include?(call)
-      render json: { error: "Invalid truco call" }, status: :unprocessable_entity
-      return
-    end
-    # Move card to table_cards and remove it from player's hand
-    step.table_cards << card_to_save
-    step.update(table_cards: step.table_cards)
-    player_cards = step.send("cards_#{player_chair}")
-    player_cards.delete(card)
-    step.update("cards_#{player_chair}" => player_cards)
-
-    # Determine the team based on the player's chair
-    player_chair_modified = player_chair.strip.upcase[-1]  # Pega a última letra de player_chair (A, B, etc.)
-    team = %w[A B].include?(player_chair_modified) ? "NOS" : "ELES"
-    card_origin_record = "#{card_to_save}---#{player_chair}---#{team}---#{player_name}"
-    # Save card origin in the first available column
-    if step.first_card_origin.nil?
-     step.update(first_card_origin: card_origin_record)
-    elsif step.second_card_origin.nil?
-     step.update(second_card_origin: card_origin_record)
-    elsif step.third_card_origin.nil?
-     step.update(third_card_origin: card_origin_record)
-    elsif step.fourth_card_origin.nil?
-    step.update(fourth_card_origin: card_origin_record)
-    end
-
-    # Se todas as quatro colunas de origem estiverem preenchidas, não definir o próximo jogador
-    if step.fourth_card_origin.nil?
-      # Determine next player in sequence A -> D -> B -> C -> A
-      chair_order = %w[A D B C]
-      next_chair = chair_order[(chair_order.index(player_chair[-1].upcase) + 1) % chair_order.length]
-      next_player_name = @game.room.send("chair_#{next_chair.downcase}")
-      step.update(player_time: next_player_name)
-    end
-      # Determina o vencedor da rodada
-      determine_round_winner(step)
-      determine_game_winner(step)
-      head :ok
+    if collect
+      handle_collect(step, find_player_chair(@game.room, player_name))
+    else
+      render json: { error: "Invalid collect action" }, status: :unprocessable_entity
     end
   end
 
@@ -495,10 +461,10 @@ end
 def handle_truco_decision(step)
   # Determina o último jogador que fez uma chamada de truco
   truco_calls = [
-    step.player_call_12,
-    step.player_call_9,
+    step.player_call_3,
     step.player_call_6,
-    step.player_call_3
+    step.player_call_9,
+    step.player_call_12
   ]
 
   last_truco_call = truco_calls.compact.first # Pega a chamada mais prioritária (12 > 9 > 6 > 3)
@@ -547,4 +513,55 @@ def calculate_additional_points(step)
     1
   end
 end
+
+def current_step
+  @game.steps.order(:number).last
+end
+
+def valid_player?(player_name)
+  find_player_chair(@game.room, player_name).present?
+end
+
+def truco_call_pending?(step)
+  step.player_call_3 || step.player_call_6 || step.player_call_9 || step.player_call_12
+end
+
+def play_card(step, player_name, card, coverup)
+  player_chair = find_player_chair(@game.room, player_name)
+  card_to_save = coverup ? "EC" : card
+
+  # Add card to table_cards
+  step.table_cards << card_to_save
+  step.update(table_cards: step.table_cards)
+
+  # Remove card from player's hand
+  player_cards = step.send("cards_#{player_chair}")
+  player_cards.delete(card)
+  step.update("cards_#{player_chair}" => player_cards)
+
+  save_card_origin(step, card_to_save, player_chair, player_name)
+  set_next_player(step, player_chair) if step.fourth_card_origin.nil?
+  determine_round_winner(step)
+  determine_game_winner(step)
+end
+
+def save_card_origin(step, card, player_chair, player_name)
+  team = %w[A B].include?(player_chair.strip.upcase[-1]) ? "NOS" : "ELES"
+  card_origin_record = "#{card}---#{player_chair}---#{team}---#{player_name}"
+
+  %i[first_card_origin second_card_origin third_card_origin fourth_card_origin].each do |column|
+    if step.send(column).nil?
+      step.update(column => card_origin_record)
+      break
+    end
+  end
+end
+
+def set_next_player(step, player_chair)
+  chair_order = %w[A D B C]
+  next_chair = chair_order[(chair_order.index(player_chair[-1].upcase) + 1) % chair_order.length]
+  next_player_name = @game.room.send("chair_#{next_chair.downcase}")
+  step.update(player_time: next_player_name)
+end
+
 end
