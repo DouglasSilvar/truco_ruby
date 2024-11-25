@@ -1,7 +1,7 @@
 # app/services/game_service.rb
 class GameService
   def initialize(game, player_name)
-    @game = game 
+    @game = game
     @player_name = player_name
     @step = current_step
   end
@@ -24,30 +24,6 @@ class GameService
     )
 
     response_data
-  end
-
-  def play_move(card:, coverup:)
-    # Validações iniciais
-    return { error: "Player is not part of this game", status: :forbidden } unless valid_player?
-
-    if card.nil?
-      return { error: "No card provided for play", status: :unprocessable_entity }
-    end
-
-    if @step.table_cards.size >= 4
-      return { error: "Cannot play card, table already has 4 cards", status: :forbidden }
-    end
-
-    player_chair = find_player_chair
-    unless @step.send("cards_#{player_chair}").include?(card)
-      return { error: "Invalid card or card not in player's hand", status: :unprocessable_entity }
-    end
-
-    # Processa a jogada
-    process_card_play(card, player_chair, coverup)
-
-    # Resposta de sucesso
-    { status: :ok }
   end
 
   private
@@ -91,75 +67,5 @@ class GameService
   # Verifica se o jogador é válido
   def valid_player?
     find_player_chair.present?
-  end
-
-  # Identifica a cadeira do jogador
-  def find_player_chair
-    @game.room.attributes.slice("chair_a", "chair_b", "chair_c", "chair_d").find do |_, name|
-      name == @player_name
-    end&.first
-  end
-
-  # Processa a jogada da carta
-  def process_card_play(card, player_chair, coverup)
-    card_to_save = coverup ? "EC" : card
-
-    # Adiciona a carta à mesa
-    @step.table_cards << card_to_save
-    @step.update(table_cards: @step.table_cards)
-
-    # Remove a carta da mão do jogador
-    player_cards = @step.send("cards_#{player_chair}")
-    player_cards.delete(card)
-    @step.update("cards_#{player_chair}" => player_cards)
-
-    # Salva a origem da carta
-    save_card_origin(card_to_save, player_chair)
-
-    # Determina o próximo jogador ou verifica o vencedor da rodada
-    if @step.fourth_card_origin.nil?
-      set_next_player(player_chair)
-    else
-      determine_round_winner
-    end
-
-    # Determina o vencedor do jogo, se aplicável
-    determine_game_winner
-  end
-
-  # Salva a origem da carta jogada
-  def save_card_origin(card, player_chair)
-    team = %w[A B].include?(player_chair.strip.upcase[-1]) ? "NOS" : "ELES"
-    card_origin_record = "#{card}---#{player_chair}---#{team}---#{@player_name}"
-
-    %i[first_card_origin second_card_origin third_card_origin fourth_card_origin].each do |column|
-      if @step.send(column).nil?
-        @step.update(column => card_origin_record)
-        break
-      end
-    end
-  end
-
-  # Define o próximo jogador
-  def set_next_player(player_chair)
-    chair_order = %w[A D B C]
-    next_chair = chair_order[(chair_order.index(player_chair[-1].upcase) + 1) % chair_order.length]
-    next_player_name = @game.room.send("chair_#{next_chair.downcase}")
-    @step.update(player_time: next_player_name)
-  end
-
-  # Determina o vencedor da rodada
-  def determine_round_winner
-    # Reaproveitar lógica existente na controller
-    determine_game_winner(@step)
-  end
-
-  # Determina o vencedor do jogo
-  def determine_game_winner
-    case
-    when @step.first == "EMPACHE"
-      # Regras para empates e outros casos
-      # (lógica completa pode ser movida para cá ou mantida como está)
-    end
   end
 end
