@@ -17,7 +17,7 @@ Rails.application.configure do
 
   # Ensures that a master key has been made available in ENV["RAILS_MASTER_KEY"], config/master.key, or an environment
   # key such as config/credentials/production.key. This key is used to decrypt credentials (and other encrypted files).
-  config.require_master_key = false
+  config.require_master_key = true
 
   # Disable serving static files from `public/`, relying on NGINX/Apache to do so instead.
   # config.public_file_server.enabled = false
@@ -95,4 +95,5 @@ Rails.application.configure do
   config.logger = Logger.new(nil)
   config.log_level = :fatal
   ActiveRecord::Base.logger = nil
+  config.secret_key_base = ENV["SECRET_KEY_BASE"]
 end
