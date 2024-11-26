@@ -1,4 +1,3 @@
-# app/services/game_service.rb
 class GameService
   def initialize(game, player_name)
     @game = game
@@ -24,6 +23,41 @@ class GameService
     )
 
     response_data
+  end
+
+  def play_move(card, coverup)
+    return { error: "Player is not part of this game", status: :forbidden } unless valid_player?
+
+    if card
+      return { error: "Cannot play card, table already has 4 cards", status: :forbidden } if @step.table_cards.size >= 4
+
+      unless player_cards.include?(card)
+        return { error: "Invalid card or card not in player's hand", status: :unprocessable_entity }
+      end
+
+      play_card(card, coverup)
+    end
+
+    {}
+  end
+
+  def collect(collect)
+    return { error: "Invalid collect action", status: :unprocessable_entity } unless collect
+
+    player_chair = find_player_chair
+    return { error: "Player not part of this game", status: :forbidden } unless player_chair
+
+    handle_collect(@step, player_chair)
+  end
+
+  def handle_call(call_value, accept)
+    if call_value
+      handle_truco_call(call_value)
+    elsif [ true, false ].include?(accept)
+      handle_accept_decision(accept)
+    else
+      { error: "Invalid call action", status: :unprocessable_entity }
+    end
   end
 
   private
@@ -67,5 +101,357 @@ class GameService
   # Verifica se o jogador é válido
   def valid_player?
     find_player_chair.present?
+  end
+
+  def player_cards
+    chair = find_player_chair
+    @step.send("cards_#{chair}")
+  end
+
+  def play_card(card, coverup)
+    chair = find_player_chair
+    card_to_save = coverup ? "EC" : card
+
+    # Atualiza as cartas na mesa
+    @step.table_cards << card_to_save
+    @step.update!(table_cards: @step.table_cards)
+
+    # Remove a carta da mão do jogador
+    updated_cards = @step.send("cards_#{chair}")
+    updated_cards.delete(card)
+    @step.update!("cards_#{chair}" => updated_cards)
+
+    save_card_origin(card_to_save, chair)
+    set_next_player(chair) if @step.fourth_card_origin.nil?
+
+    # Determina vencedor da rodada e do jogo
+    determine_round_winner
+    determine_game_winner
+  end
+
+  def save_card_origin(card, chair)
+    team = %w[A B].include?(chair.strip.upcase[-1]) ? "NOS" : "ELES"
+    card_origin_record = "#{card}---#{chair}---#{team}---#{@player_name}"
+
+    %i[first_card_origin second_card_origin third_card_origin fourth_card_origin].each do |column|
+      if @step.send(column).nil?
+        @step.update!(column => card_origin_record)
+        break
+      end
+    end
+  end
+
+  def set_next_player(chair)
+    chair_order = %w[A D B C]
+    next_chair = chair_order[(chair_order.index(chair[-1].upcase) + 1) % chair_order.length]
+    next_player_name = @game.room.send("chair_#{next_chair.downcase}")
+    @step.update!(player_time: next_player_name)
+  end
+
+  def determine_round_winner
+    table_cards = @step.table_cards
+    card_origins = [
+      @step.first_card_origin,
+      @step.second_card_origin,
+      @step.third_card_origin,
+      @step.fourth_card_origin
+    ].compact
+    puts "4 cartas na mesa, determinando vencedor..."
+    return if table_cards.size != 4 || card_origins.size != 4
+    puts "4 cartas na mesa, determinando vencedor..."
+    winner_team, strongest_card_origin = calculate_winner(table_cards, card_origins, @step.vira)
+    puts "Vencedor: #{winner_team}, Carta mais forte: #{strongest_card_origin}"
+    if winner_team == "EMPACHE" || strongest_card_origin.nil?
+      if @step.first.nil?
+        @step.update(first: "EMPACHE")
+      elsif @step.second.nil?
+        @step.update(second: "EMPACHE")
+      else
+        @step.update(third: "EMPACHE")
+      end
+
+      if @step.fourth_card_origin
+        current_chair = @step.fourth_card_origin.split("---")[1]
+        current_chair_letter = current_chair[-1].upcase
+        chair_order = %w[A D B C]
+        next_chair = chair_order[(chair_order.index(current_chair_letter) + 1) % chair_order.length]
+        next_player_name = @game.room.send("chair_#{next_chair.downcase}")
+        @step.update(player_time: next_player_name)
+      else
+        raise "Unable to determine next chair"
+      end
+
+      return
+    end
+    puts "Vencedor: #{winner_team}, Carta mais forte: #{strongest_card_origin}"
+    if @step.first.nil?
+      @step.update(
+        first: winner_team,
+        player_time: strongest_card_origin&.split("---")&.fetch(3, nil)
+      )
+    elsif @step.second.nil?
+      @step.update(
+        second: winner_team,
+        player_time: strongest_card_origin&.split("---")&.fetch(3, nil)
+      )
+    else
+      @step.update(
+        third: winner_team,
+        player_time: strongest_card_origin&.split("---")&.fetch(3, nil)
+      )
+    end
+  end
+
+  def calculate_winner(table_cards, card_origins, vira)
+    card_hierarchy = %w[4 5 6 7 Q J K A 2 3]
+    vira_value = vira[0..-2] # Remove o último caractere (naipe) da carta
+    mania_card = card_hierarchy[(card_hierarchy.index(vira_value) + 1) % card_hierarchy.size] if card_hierarchy.index(vira_value)
+
+    # Avaliar a força das cartas
+    card_values = card_origins.map do |origin|
+      card, chair, team, player_name = origin.split("---")
+      {
+        card: card,
+        chair: chair,
+        team: team,
+        player_name: player_name,
+        strength: calculate_card_strength(card, mania_card, card_hierarchy, chair)
+      }
+    end
+
+    # Verifica se uma carta "mania" foi jogada
+    mania_played = card_values.find { |entry| entry[:card] == mania_card }
+    return [ mania_played[:team], mania_played ] if mania_played
+
+    # Agrupando por equipe para determinar o maior valor em cada time
+    teams = card_values.group_by { |entry| entry[:team] }
+    max_nos_card = teams["NOS"]&.max_by { |entry| entry[:strength] }
+    max_eles_card = teams["ELES"]&.max_by { |entry| entry[:strength] }
+
+    # Determina empate caso as forças sejam iguais
+    if max_nos_card && max_eles_card && max_nos_card[:strength] == max_eles_card[:strength]
+      return [ "EMPACHE", nil ]
+    end
+
+    # Define o time vencedor com a carta mais forte
+    winning_team = max_nos_card[:strength] > max_eles_card[:strength] ? "NOS" : "ELES"
+    strongest_card = [ max_nos_card, max_eles_card ].compact.max_by { |entry| entry[:strength] }
+    [ winning_team, "#{strongest_card[:card]}---#{strongest_card[:chair]}---#{strongest_card[:team]}---#{strongest_card[:player_name]}" ]
+  end
+
+  def calculate_card_strength(card, mania_card, hierarchy, chair)
+    # Hierarquia básica de força
+    return 0 if card == "EC"
+    card_value = card[0..-2] # Remove o último caractere (naipe) da carta
+    base_strength = hierarchy.index(card_value)
+    # Se a carta for MANIA, ajuste a força com base no naipe
+    if card_value == mania_card
+      suit_order = %w[O E C Z]
+      card_nipe = card[-1]
+      base_strength = hierarchy.size + suit_order.index(card_nipe)
+    end
+    base_strength
+  end
+
+  def determine_game_winner
+    case
+    when @step.first == "EMPACHE"
+      if @step.second == "EMPACHE"
+        @step.update(win: @step.third == "EMPACHE" ? "EMP" : @step.third)
+      else
+        @step.update(win: @step.second)
+      end
+    when @step.first && @step.second == "EMPACHE"
+      @step.update(win: @step.first)
+    when @step.first && @step.first == @step.second
+      @step.update(win: @step.first)
+    when @step.first && @step.first != @step.second && @step.second != "EMPACHE"
+      @step.update(win: @step.third == "EMPACHE" ? @step.first : @step.third)
+    when @step.first == "EMPACHE" && @step.second == "EMPACHE" && @step.third == "EMPACHE"
+      @step.update(win: "EMP")
+    end
+  end
+
+  def handle_collect(step, player_chair)
+    if step.win && step.win != "EMPT"
+      handle_winner(step)
+    else
+      step.update(
+        table_cards: [],
+        first_card_origin: nil,
+        second_card_origin: nil,
+        third_card_origin: nil,
+        fourth_card_origin: nil
+      )
+      { message: "Cards cleared" }
+    end
+  end
+
+  def handle_winner(step)
+    game = step.game
+    additional_points = calculate_additional_points(step)
+
+    if step.win == "NOS"
+      game.increment!(:score_us, additional_points)
+    elsif step.win == "ELES"
+      game.increment!(:score_them, additional_points)
+    end
+
+    winner = check_winner(game)
+    if winner
+      finalize_game(step, game, winner)
+    else
+      reset_step(step, Step.generate_deck.shuffle)
+      if step.errors.any?
+        { error: "Failed to reset round", details: step.errors.full_messages, status: :internal_server_error }
+      else
+        { message: "Point awarded and round reset", step_id: step.id }
+      end
+    end
+  end
+
+  def check_winner(game)
+    return "NOS" if game.score_us >= 12
+    return "ELES" if game.score_them >= 12
+    nil
+  end
+
+  def finalize_game(step, game, winner)
+    game.update(end_game_win: winner)
+    step.update(
+      table_cards: [],
+      first_card_origin: nil,
+      second_card_origin: nil,
+      third_card_origin: nil,
+      fourth_card_origin: nil,
+      win: nil
+    )
+    game.room.update(game: nil)
+    game.room.room_players.update_all(ready: false)
+    { message: "Game finished. #{winner} won!", game_id: game.uuid }
+  end
+
+  def reset_step(step, deck)
+    step.update(
+      cards_chair_a: deck&.shift(3),
+      cards_chair_b: deck&.shift(3),
+      cards_chair_c: deck&.shift(3),
+      cards_chair_d: deck&.shift(3),
+      table_cards: [],
+      vira: deck&.shift,
+      first_card_origin: nil,
+      second_card_origin: nil,
+      third_card_origin: nil,
+      fourth_card_origin: nil,
+      first: nil,
+      second: nil,
+      third: nil,
+      player_call_3: nil,
+      player_call_6: nil,
+      player_call_9: nil,
+      player_call_12: nil,
+      is_accept_first: nil,
+      is_accept_second: nil,
+      win: nil
+    )
+  end
+  def calculate_additional_points(step)
+    case
+    when step.player_call_12.present?
+      puts "player_call_3 detected: #{step.player_call_3.inspect}"
+      step.is_accept_second.include?("---yes") ? 12 : 9
+    when step.player_call_9.present?
+      puts "player_call_6 detected: #{step.player_call_6.inspect}"
+      step.is_accept_second.include?("---yes") ? 9 : 6
+    when step.player_call_6.present?
+      puts "player_call_9 detected: #{step.player_call_9.inspect}"
+      step.is_accept_second.include?("---yes") ? 6 : 3
+    when step.player_call_3.present?
+      puts "player_call_12 detected: #{step.player_call_12.inspect}"
+      step.is_accept_second.include?("---yes") ? 3 : 1
+    else
+      puts "No player_call found, returning default 1"
+      1
+    end
+  end
+
+  def handle_truco_call(call_value)
+    valid_calls = [ 3, 6, 9, 12 ]
+    return { error: "Invalid truco call", status: :unprocessable_entity } unless valid_calls.include?(call_value.to_i)
+
+    player_chair = find_player_chair
+    return { error: "Player is not part of this game", status: :forbidden } unless player_chair
+
+    team = %w[a b].include?(player_chair[-1].downcase) ? "NOS" : "ELES"
+    player_call_value = "#{@player_name}---#{team}"
+
+    step_column = case call_value.to_i
+    when 3 then :player_call_3
+    when 6 then :player_call_6
+    when 9 then :player_call_9
+    when 12 then :player_call_12
+    end
+
+    if @step.send(step_column).nil?
+      @step.update(step_column => player_call_value, player_time: nil)
+      { message: "Truco called at level #{call_value} by #{@player_name} (#{team})" }
+    else
+      { error: "Level #{call_value} already called", status: :unprocessable_entity }
+    end
+  end
+
+  def handle_accept_decision(accept)
+    player_chair = find_player_chair
+    return { error: "Player is not part of this game", status: :forbidden } unless player_chair
+
+    team = %w[a b].include?(player_chair[-1].downcase) ? "NOS" : "ELES"
+    decision = "#{@player_name}---#{accept ? 'yes' : 'no'}---#{team}"
+
+    if @step.is_accept_first.nil?
+      @step.update(is_accept_first: decision)
+    elsif @step.is_accept_second.nil?
+      existing_player = @step.is_accept_first&.split("---")&.first
+      if existing_player != @player_name
+        @step.update(is_accept_second: decision)
+        resolve_truco_decision
+      else
+        { error: "Player already made a decision", status: :unprocessable_entity }
+      end
+    else
+      { error: "Both decisions already made", status: :unprocessable_entity }
+    end
+  end
+
+  def resolve_truco_decision
+    last_truco_call = [ @step.player_call_3, @step.player_call_6, @step.player_call_9, @step.player_call_12 ].compact.first
+    return { error: "No truco call to resolve", status: :unprocessable_entity } unless last_truco_call
+
+    player_data = last_truco_call.split("---")
+    truco_player = player_data[0]
+    truco_team = player_data[1]
+
+    if @step.is_accept_second.include?("---no")
+      @step.update!(win: truco_team, player_time: truco_player)
+      { message: "Truco rejected, #{truco_team} wins the point" }
+    elsif @step.is_accept_second.include?("---yes")
+      if @step.table_cards.any? || [ @step.first_card_origin, @step.second_card_origin, @step.third_card_origin, @step.fourth_card_origin ].any?
+        last_card_origin = [ @step.fourth_card_origin, @step.third_card_origin, @step.second_card_origin, @step.first_card_origin ].compact.first
+        if last_card_origin
+          last_player_chair = last_card_origin.split("---")[1]
+          chair_order = %w[A D B C]
+          next_chair = chair_order[(chair_order.index(last_player_chair[-1].upcase) + 1) % chair_order.length]
+          next_player_name = @game.room.send("chair_#{next_chair.downcase}")
+          @step.update!(player_time: next_player_name)
+          { message: "Truco accepted, next player is #{next_player_name}" }
+        else
+          { error: "Error determining the next player", status: :internal_server_error }
+        end
+      else
+        @step.update!(player_time: truco_player)
+        { message: "Truco accepted, turn remains with #{truco_player}" }
+      end
+    else
+      { error: "Invalid truco decision state", status: :unprocessable_entity }
+    end
   end
 end
