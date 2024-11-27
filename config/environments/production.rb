@@ -96,4 +96,10 @@ Rails.application.configure do
   config.log_level = :fatal
   ActiveRecord::Base.logger = nil
   config.secret_key_base = ENV["SECRET_KEY_BASE"]
+  allow do
+    origins "https://truco.up.railway.app"
+    resource "*",
+             headers: :any,
+             methods: [ :get, :post, :put, :patch, :delete, :options, :head ]
+  end
 end
