@@ -156,11 +156,8 @@ class GameService
       @step.third_card_origin,
       @step.fourth_card_origin
     ].compact
-    puts "4 cartas na mesa, determinando vencedor..."
     return if table_cards.size != 4 || card_origins.size != 4
-    puts "4 cartas na mesa, determinando vencedor..."
     winner_team, strongest_card_origin = calculate_winner(table_cards, card_origins, @step.vira)
-    puts "Vencedor: #{winner_team}, Carta mais forte: #{strongest_card_origin}"
     if winner_team == "EMPACHE" || strongest_card_origin.nil?
       if @step.first.nil?
         @step.update(first: "EMPACHE")
@@ -183,7 +180,6 @@ class GameService
 
       return
     end
-    puts "Vencedor: #{winner_team}, Carta mais forte: #{strongest_card_origin}"
     if @step.first.nil?
       @step.update(
         first: winner_team,
@@ -358,19 +354,14 @@ class GameService
   def calculate_additional_points(step)
     case
     when step.player_call_12.present?
-      puts "player_call_3 detected: #{step.player_call_3.inspect}"
       step.is_accept_second.include?("---yes") ? 12 : 9
     when step.player_call_9.present?
-      puts "player_call_6 detected: #{step.player_call_6.inspect}"
       step.is_accept_second.include?("---yes") ? 9 : 6
     when step.player_call_6.present?
-      puts "player_call_9 detected: #{step.player_call_9.inspect}"
       step.is_accept_second.include?("---yes") ? 6 : 3
     when step.player_call_3.present?
-      puts "player_call_12 detected: #{step.player_call_12.inspect}"
       step.is_accept_second.include?("---yes") ? 3 : 1
     else
-      puts "No player_call found, returning default 1"
       1
     end
   end
@@ -393,7 +384,7 @@ class GameService
     end
 
     if @step.send(step_column).nil?
-      @step.update(step_column => player_call_value, player_time: nil)
+      @step.update(step_column => player_call_value, player_time: nil, is_accept_first: nil, is_accept_second: nil)
       { message: "Truco called at level #{call_value} by #{@player_name} (#{team})" }
     else
       { error: "Level #{call_value} already called", status: :unprocessable_entity }

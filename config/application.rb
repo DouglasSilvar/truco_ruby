@@ -12,6 +12,7 @@ module TrucoRuby
     config.load_defaults 7.2
     config.autoload_lib(ignore: %w[assets tasks])
     config.api_only = true
+    config.time_zone = 'Brasilia'
     config.middleware.insert_before 0, Rack::Cors do
       allow do
         origins '*' # Substitua '*' pela origem específica, se necessário (ex.: 'http://localhost:3000')
