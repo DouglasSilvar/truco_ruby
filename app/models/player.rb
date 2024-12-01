@@ -9,6 +9,7 @@ class Player < ApplicationRecord
 
   has_many :room_players
   has_many :rooms, through: :room_players
+  has_many :messages, dependent: :nullify
 
   # Definir a serialização padrão sem incluir o player_id
   def as_json(options = {})

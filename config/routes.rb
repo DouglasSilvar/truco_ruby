@@ -9,6 +9,7 @@ Rails.application.routes.draw do
   post "rooms/:uuid/kick", to: "rooms#kick_player"
   post "rooms/:uuid/ready/:boolean", to: "rooms#update_ready_status"
   post "rooms/:uuid/start", to: "rooms#start_game"
+  post "rooms/:uuid/message", to: "rooms#send_message"
 
   resources :games, only: [ :show ], param: :uuid
   post "/games/:uuid/play_move", to: "games#play_move"

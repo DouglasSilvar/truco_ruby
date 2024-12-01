@@ -24,6 +24,10 @@ class RoomService
 
     player = Player.find_by(uuid: player_uuid)
 
+    # Busca as mensagens do chat associado à sala
+    chat = room.chat
+    messages = RoomService.fetch_recent_messages(chat)
+
     chairs = {
       chair_a: room.chair_a,
       chair_b: room.chair_b,
@@ -52,7 +56,8 @@ class RoomService
         players_count: players_count,
         chairs: chairs,
         player_kick_status: player_kick_status,
-        ready: ready_players
+        ready: ready_players,
+        messages: messages
       }
     else
       # Jogador não encontrado, mas retorna informações da sala
@@ -62,7 +67,8 @@ class RoomService
         players_count: players_count,
         chairs: chairs,
         player_kick_status: nil,
-        ready: ready_players
+        ready: ready_players,
+        messages: messages
       }
     end
   end
@@ -247,6 +253,43 @@ class RoomService
       { success: true, message: "Game started", game_id: game_id, step_id: step.id }
     else
       { success: false, error: step.errors.full_messages }
+    end
+  end
+
+  def self.send_message(room_uuid:, player_uuid:, content:)
+    room = Room.find_by(uuid: room_uuid)
+    return { success: false, error: "Room not found" } unless room
+
+    player = Player.find_by(uuid: player_uuid)
+    return { success: false, error: "Player not found" } unless player
+
+    # Verifica se o jogador está na sala
+    unless room.players.include?(player)
+      return { success: false, error: "Player is not part of this room" }
+    end
+
+    # Verifica o comprimento do conteúdo
+    if content.blank? || content.length > 256
+      return { success: false, error: "Message content must be between 1 and 256 characters" }
+    end
+
+    # Cria a mensagem
+    chat = room.chat
+    message = chat.messages.create(player_id: player.uuid, content: content)
+
+    if message.persisted?
+      { success: true, message: "Message sent successfully" }
+    else
+      { success: false, error: "Failed to send message", details: message.errors.full_messages }
+    end
+  end
+  def self.fetch_recent_messages(chat)
+    chat.messages.order(created_at: :desc).limit(12).map do |message|
+      {
+        player_name: message.player.name,
+        date_created: message.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+        content: message.content
+      }
     end
   end
 end

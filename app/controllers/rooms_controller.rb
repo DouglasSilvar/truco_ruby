@@ -17,7 +17,8 @@ class RoomsController < ApplicationController
         players_count: result[:players_count],
         chairs: result[:chairs],
         player_kick_status: result[:player_kick_status],
-        ready: result[:ready]
+        ready: result[:ready],
+        messages: result[:messages]
       )
     else
       render json: { error: result[:error] }, status: :not_found
@@ -113,6 +114,20 @@ class RoomsController < ApplicationController
       render json: { message: result[:message], ready: result[:ready] }, status: :ok
     else
       render json: { error: result[:error], details: result[:details] }, status: :unprocessable_entity
+    end
+  end
+
+  def send_message
+    result = RoomService.send_message(
+      room_uuid: params[:uuid],
+      player_uuid: request.headers["uuid"],
+      content: params[:content]
+    )
+
+    if result[:success]
+      render json: { message: result[:message] }, status: :created
+    else
+      render json: { error: result[:error] }, status: :unprocessable_entity
     end
   end
 

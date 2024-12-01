@@ -12,6 +12,10 @@ class GameService
 
     return { error: "No step available for this game", status: :not_found } unless step
 
+    # Busca as mensagens do chat associado à sala do jogo
+    chat = @game.room.chat
+    messages = RoomService.fetch_recent_messages(chat)
+
     # Formata os dados do step para o jogador ou telespectador
     step_data = format_step_data(step, player_chair)
 
@@ -19,7 +23,8 @@ class GameService
     response_data = @game.as_json_with_chairs.merge(
       step: step_data,
       room_name: @game.room.name,
-      owner: { name: @game.room.owner.name }
+      owner: { name: @game.room.owner.name },
+      messages: messages
     )
 
     response_data

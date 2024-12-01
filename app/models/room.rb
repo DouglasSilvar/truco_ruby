@@ -1,6 +1,7 @@
 class Room < ApplicationRecord
   before_create :generate_uuid
   before_save :normalize_name
+  after_create :create_chat
 
   belongs_to :owner, class_name: "Player", foreign_key: "player_id", primary_key: "uuid"
 
@@ -8,6 +9,7 @@ class Room < ApplicationRecord
   has_many :players, through: :room_players    # Depois defina esta associação
 
   has_many :games, dependent: :destroy
+  has_one :chat, dependent: :destroy
 
   validates :name, presence: true, length: { maximum: 20 }
 
@@ -63,5 +65,8 @@ class Room < ApplicationRecord
        .gsub(/[úùûü]/, "u")
        .gsub(/[ç]/, "c")
        .gsub(/[^a-z0-9_]/, "")                # Remove caracteres especiais
+  end
+  def create_chat
+    Chat.create!(room_id: self.uuid)
   end
 end

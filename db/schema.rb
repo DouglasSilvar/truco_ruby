@@ -10,7 +10,14 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2024_11_17_123636) do
+ActiveRecord::Schema[7.2].define(version: 2024_12_01_122311) do
+  create_table "chats", force: :cascade do |t|
+    t.string "room_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["room_id"], name: "index_chats_on_room_id"
+  end
+
   create_table "games", primary_key: "uuid", id: :string, force: :cascade do |t|
     t.string "room_id", null: false
     t.integer "score_us", default: 0
@@ -21,6 +28,16 @@ ActiveRecord::Schema[7.2].define(version: 2024_11_17_123636) do
     t.boolean "end", default: false
     t.string "end_game_win"
     t.index ["room_id"], name: "index_games_on_room_id"
+  end
+
+  create_table "messages", force: :cascade do |t|
+    t.string "chat_id", null: false
+    t.string "player_id", null: false
+    t.text "content", limit: 256, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["chat_id"], name: "index_messages_on_chat_id"
+    t.index ["player_id"], name: "index_messages_on_player_id"
   end
 
   create_table "players", primary_key: "uuid", id: :string, force: :cascade do |t|
@@ -86,7 +103,10 @@ ActiveRecord::Schema[7.2].define(version: 2024_11_17_123636) do
     t.index ["game_id"], name: "index_steps_on_game_id"
   end
 
+  add_foreign_key "chats", "rooms", primary_key: "uuid"
   add_foreign_key "games", "rooms", primary_key: "uuid"
+  add_foreign_key "messages", "chats"
+  add_foreign_key "messages", "players", primary_key: "uuid"
   add_foreign_key "room_players", "players", primary_key: "uuid"
   add_foreign_key "room_players", "rooms", primary_key: "uuid"
   add_foreign_key "rooms", "players", primary_key: "uuid"
