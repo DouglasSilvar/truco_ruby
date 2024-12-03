@@ -24,7 +24,8 @@ class GameService
       step: step_data,
       room_name: @game.room.name,
       owner: { name: @game.room.owner.name },
-      messages: messages
+      messages: messages,
+      protected: @game.room.password.present?
     )
 
     response_data

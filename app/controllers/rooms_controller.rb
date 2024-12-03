@@ -26,14 +26,24 @@ class RoomsController < ApplicationController
   end
 
   def create
-    result = RoomService.create_room(params: room_params, player_uuid: params[:player_uuid])
+    # Captura os parâmetros diretamente do payload
+    player_uuid = params[:player_uuid]
+    room_params = {
+      name: params.dig(:room, :name), # Captura o nome da sala dentro da chave "room"
+      password: params[:password] # Captura a senha diretamente
+    }
 
+    # Chama o serviço passando os parâmetros
+    result = RoomService.create_room(params: room_params, player_uuid: player_uuid)
+
+    # Renderiza o resultado
     if result[:success]
       render json: result[:room].as_json.merge(players_count: result[:room].room_players.where(kick: false).count), status: :created
     else
       render json: { error: result[:error] }, status: :unprocessable_entity
     end
   end
+
 
   def join_room
     result = RoomService.join_room(
@@ -129,11 +139,5 @@ class RoomsController < ApplicationController
     else
       render json: { error: result[:error] }, status: :unprocessable_entity
     end
-  end
-
-  private
-
-  def room_params
-    params.require(:room).permit(:name, :password)
   end
 end

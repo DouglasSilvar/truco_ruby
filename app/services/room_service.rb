@@ -77,10 +77,9 @@ class RoomService
     player = Player.find_by(uuid: player_uuid)
 
     return { success: false, error: "Player not found" } unless player
-
     room = Room.new(params)
     room.owner = player
-    room.password = params[:password] if params[:password].present?
+    room.password = params[:password] if params[:password].present? # Persiste o password caso exista
 
     if room.save
       RoomPlayer.create(room: room, player: player)
