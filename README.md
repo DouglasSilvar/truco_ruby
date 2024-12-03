@@ -165,4 +165,3 @@ Acesse `http://localhost:3000` no navegador para interagir com a API.
 #### 4. Coletar Cartas
 - **Endpoint:** `POST /games/:uuid/collect`
 - **Descrição:** Permite recolher cartas após uma rodada.
-
