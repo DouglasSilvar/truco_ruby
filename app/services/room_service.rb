@@ -25,8 +25,12 @@ class RoomService
     player = Player.find_by(uuid: player_uuid)
 
     # Busca as mensagens do chat associado à sala
+    # Verifica se o jogador está na sala (nas cadeiras)
+    player_in_room = %w[chair_a chair_b chair_c chair_d].any? { |chair| room[chair] == player&.name }
+
+    # Busca as mensagens do chat apenas se o jogador estiver na sala e for válido
     chat = room.chat
-    messages = RoomService.fetch_recent_messages(chat)
+    messages = player && player_in_room ? RoomService.fetch_recent_messages(chat) : nil
 
     chairs = {
       chair_a: room.chair_a,
