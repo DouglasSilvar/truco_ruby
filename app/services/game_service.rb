@@ -428,8 +428,11 @@ class GameService
     truco_team = player_data[1]
 
     if @step.is_accept_second.include?("---no")
-      @step.update!(win: truco_team, player_time: truco_player)
-      { message: "Truco rejected, #{truco_team} wins the point" }
+      opponent_team = truco_team == "NOS" ? "ELES" : "NOS"
+      caller_player = @step.player_call_6&.split("---")&.first
+      @step.update!(win: opponent_team, player_time: caller_player)
+      { message: "Truco rejected, #{opponent_team} wins the point. Next turn: #{caller_player}" }
+    
     elsif @step.is_accept_second.include?("---yes")
       if @step.table_cards.any? || [ @step.first_card_origin, @step.second_card_origin, @step.third_card_origin, @step.fourth_card_origin ].any?
         last_card_origin = [ @step.fourth_card_origin, @step.third_card_origin, @step.second_card_origin, @step.first_card_origin ].compact.first
