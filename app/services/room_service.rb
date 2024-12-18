@@ -118,7 +118,10 @@ class RoomService
       end
     end
 
-    if room.players.count < 4
+    # Definir o limite de jogadores dependendo do modo
+    max_players = room.is_two_players ? 2 : 4
+
+    if room.players.where(room_players: { kick: false }).count < max_players
       RoomPlayer.create(room: room, player: player)
       room.assign_random_chair(player.name)
       { success: true, message: "Player joined the room", room: room }
@@ -300,10 +303,78 @@ class RoomService
     room = Room.find_by(uuid: room_uuid)
     return { success: false, error: "Room not found" } unless room
 
-    # Verifica se o player que fez a solicitação é o dono da sala
+    # Verifica se o solicitante é o dono da sala
     return { success: false, error: "Unauthorized" } unless room.owner.uuid == player_uuid
 
     new_value = ActiveRecord::Type::Boolean.new.cast(two_player)
+
+    # Se for ativar o modo dois jogadores, aplicar as restrições:
+    if new_value
+      # Conta jogadores atuais (não expulsos)
+      players_count = room.room_players.where(kick: false).count
+
+      # Verifica se existe 1 ou 2 jogadores
+      if players_count > 2
+        return { success: false, error: "Cannot enable two-player mode with more than 2 players." }
+      end
+
+      # Garantir a disposição das cadeiras A e C se houver 2 jogadores.
+      # Ordem desejada:
+      #   Se 2 jogadores: Dono na A e outro na C
+      #   Se 1 jogador (dono): Dono na A
+
+      owner_name = room.owner.name
+
+      # Mapeia quem está em qual cadeira atualmente
+      current_chairs = {
+        "chair_a" => room.chair_a,
+        "chair_b" => room.chair_b,
+        "chair_c" => room.chair_c,
+        "chair_d" => room.chair_d
+      }
+
+      if players_count == 1
+        # Se só tem o dono, colocá-lo na cadeira A se não estiver lá
+        if room.chair_a != owner_name
+          # Remover dono de qualquer outra cadeira
+          %w[chair_b chair_c chair_d].each do |chair|
+            room[chair] = nil if room[chair] == owner_name
+          end
+          room.chair_a = owner_name
+        end
+      elsif players_count == 2
+        # Dois jogadores: dono em A, outro em C
+        # Descobrir quem é o outro jogador
+        other_player = room.players.where.not(uuid: room.owner.uuid).first
+        other_player_name = other_player.name if other_player
+
+        # Ajustar cadeiras
+        # Dono na A
+        if room.chair_a != owner_name
+          # Remover dono de outra cadeira
+          %w[chair_b chair_c chair_d].each do |chair|
+            if room[chair] == owner_name
+              room[chair] = nil
+              break
+            end
+          end
+          room.chair_a = owner_name
+        end
+
+        # Outro jogador na C
+        if room.chair_c != other_player_name
+          # Remove o outro jogador de onde ele estiver
+          %w[chair_a chair_b chair_c chair_d].each do |chair|
+            if room[chair] == other_player_name
+              room[chair] = nil
+              break
+            end
+          end
+          room.chair_c = other_player_name
+        end
+      end
+    end
+
     if room.update(is_two_players: new_value)
       { success: true, message: "Room updated successfully", is_two_players: room.is_two_players }
     else
