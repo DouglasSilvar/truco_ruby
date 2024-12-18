@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2024_12_01_122311) do
+ActiveRecord::Schema[7.2].define(version: 2024_12_18_162419) do
   create_table "chats", force: :cascade do |t|
     t.string "room_id", null: false
     t.datetime "created_at", null: false
@@ -27,6 +27,7 @@ ActiveRecord::Schema[7.2].define(version: 2024_12_01_122311) do
     t.json "game_show", default: {}
     t.boolean "end", default: false
     t.string "end_game_win"
+    t.boolean "is_two_players", default: false
     t.index ["room_id"], name: "index_games_on_room_id"
   end
 
@@ -71,6 +72,7 @@ ActiveRecord::Schema[7.2].define(version: 2024_12_01_122311) do
     t.string "game"
     t.string "room_owner"
     t.json "room_show", default: {}
+    t.boolean "is_two_players", default: false
     t.index ["uuid"], name: "index_rooms_on_uuid", unique: true
   end
 

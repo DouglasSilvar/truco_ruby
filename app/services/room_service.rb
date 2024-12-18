@@ -295,4 +295,19 @@ class RoomService
       }
     end
   end
+
+  def self.update_two_player_mode(room_uuid:, player_uuid:, two_player:)
+    room = Room.find_by(uuid: room_uuid)
+    return { success: false, error: "Room not found" } unless room
+
+    # Verifica se o player que fez a solicitação é o dono da sala
+    return { success: false, error: "Unauthorized" } unless room.owner.uuid == player_uuid
+
+    new_value = ActiveRecord::Type::Boolean.new.cast(two_player)
+    if room.update(is_two_players: new_value)
+      { success: true, message: "Room updated successfully", is_two_players: room.is_two_players }
+    else
+      { success: false, error: "Failed to update room" }
+    end
+  end
 end
