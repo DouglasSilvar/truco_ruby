@@ -222,12 +222,21 @@ class RoomService
       return { success: false, error: "Only the room owner can start the game" }
     end
 
-    # Verifica o número de jogadores prontos, excluindo o owner
-    ready_players_count = room.room_players.where.not(player_id: room.owner.uuid)
-                                           .where(ready: true, kick: false).count
+    # Se is_two_players = true, então só 1 player (excluindo o owner) precisa estar pronto
+    # Se is_two_players = false, então 3 players (excluindo o owner) precisam estar prontos
+    required_players = room.is_two_players ? 1 : 3
 
-    if ready_players_count != 3
-      return { success: false, error: "Game cannot be started. There must be 3 players ready, excluding the owner." }
+    ready_players_count = room.room_players
+                             .where.not(player_id: room.owner.uuid)
+                             .where(ready: true, kick: false)
+                             .count
+
+    if ready_players_count != required_players
+      return {
+        success: false,
+        error: "Game cannot be started. There must be #{required_players} "\
+               "player(s) ready, excluding the owner."
+      }
     end
 
     # Inicia o jogo e cria o UUID
@@ -240,8 +249,11 @@ class RoomService
 
     # Gera o baralho completo e distribui as cartas
     deck = Step.generate_deck.shuffle
-    cards_chair_a, cards_chair_b, cards_chair_c, cards_chair_d = deck.shift(3), deck.shift(3), deck.shift(3), deck.shift(3)
-    vira = deck.shift # Define a carta 'vira' aleatoriamente
+    cards_chair_a = deck.shift(3)
+    cards_chair_b = deck.shift(3)
+    cards_chair_c = deck.shift(3)
+    cards_chair_d = deck.shift(3)
+    vira = deck.shift # Define a carta 'vira'
 
     step = Step.new(
       game_id: game.uuid,
@@ -261,6 +273,7 @@ class RoomService
       { success: false, error: step.errors.full_messages }
     end
   end
+
 
   def self.send_message(room_uuid:, player_uuid:, content:)
     room = Room.find_by(uuid: room_uuid)

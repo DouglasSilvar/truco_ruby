@@ -1,4 +1,4 @@
-class GameService
+class Gamex2Service
   def initialize(game, player_name)
     @game = game
     @player_name = player_name
