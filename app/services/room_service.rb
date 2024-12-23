@@ -244,7 +244,11 @@ class RoomService
     room.update(game: game_id)
 
     # Criar a entrada na tabela de jogos e verificar sucesso
-    game = Game.new(uuid: game_id, room_id: room.uuid)
+    game = Game.new(
+      uuid: game_id,
+      room_id: room.uuid,
+      is_two_players: room.is_two_players # <---- Importante
+    )
     return { success: false, error: game.errors.full_messages } unless game.save
 
     # Gera o baralho completo e distribui as cartas

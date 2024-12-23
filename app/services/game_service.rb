@@ -25,6 +25,7 @@ class GameService
       room_name: @game.room.name,
       owner: { name: @game.room.owner.name },
       messages: messages,
+      is_two_players: @game.is_two_players,
       protected: @game.room.password.present?
     )
 
