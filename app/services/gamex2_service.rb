@@ -150,31 +150,32 @@ class Gamex2Service
 
   def set_next_player(current_chair)
     chair_order = %w[A C]
-  
+
     # Extrai a letra da cadeira, caso esteja no formato 'chair_a'
     current_chair = current_chair[-1].upcase if current_chair.start_with?("chair_")
-  
+
     # Verifica se a cadeira é válida
     unless chair_order.include?(current_chair)
       raise "Invalid chair: #{current_chair.inspect}"
     end
-  
+
     # Determina a próxima cadeira
     next_chair = chair_order[(chair_order.index(current_chair) + 1) % chair_order.size]
-  
+
     # Busca o próximo jogador baseado na cadeira
     next_player_name = @game.room.send("chair_#{next_chair.downcase}")
-  
+
     # Verifica se o próximo jogador existe
     unless next_player_name
       raise "No player assigned to chair: #{next_chair}"
     end
-  
+
     # Atualiza o próximo jogador no step
     @step.update!(player_time: next_player_name)
   end
 
   def determine_round_winner
+    Rails.logger.warn("Determining round winner...")
     table_cards = @step.table_cards
     card_origins = [
       @step.first_card_origin,
@@ -211,6 +212,8 @@ class Gamex2Service
       @step.update(first: winner_team, player_time: extract_player_from_origin(strongest_card_origin))
     elsif @step.second.nil?
       @step.update(second: winner_team, player_time: extract_player_from_origin(strongest_card_origin))
+    else
+      @step.update(third: winner_team, player_time: extract_player_from_origin(strongest_card_origin))
     end
   end
 
@@ -303,7 +306,7 @@ class Gamex2Service
 
   def handle_collect(step, player_chair)
     if step.win && step.win != "EMPT"
-      handle_winner(step)
+      handle_winner_single(step)
     else
       step.update(
         table_cards: [],
@@ -316,7 +319,7 @@ class Gamex2Service
     end
   end
 
-  def handle_winner(step)
+  def handle_winner_single(step)
     game = step.game
     additional_points = calculate_additional_points(step)
 
