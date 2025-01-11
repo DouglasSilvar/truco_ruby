@@ -432,12 +432,29 @@ class Gamex2Service
     return { error: "Player is not part of this game", status: :forbidden } unless player_chair
 
     decision = "#{@player_name}---#{accept ? 'yes' : 'no'}"
+    @step.update(is_accept_first: decision, is_accept_second: decision)
+      resolve_truco_decision
+  end
 
-    if @step.is_accept_first.nil?
-      @step.update(is_accept_first: decision)
+  def handle_accept_decision(accept)
+    player_chair = find_player_chair
+    return { error: "Player is not part of this game", status: :forbidden } unless player_chair
+
+    team = %w[a b].include?(player_chair[-1].downcase) ? "NOS" : "ELES"
+    decision = "#{@player_name}---#{accept ? 'yes' : 'no'}---#{team}"
+
+    # Verifica se o jogador já tomou uma decisão anteriormente
+    existing_decisions = [ @step.is_accept_first, @step.is_accept_second ].compact
+    if existing_decisions.any? { |d| d.split("---").first == @player_name }
+      return { error: "Player already made a decision", status: :unprocessable_entity }
+    end
+
+    # Salva a decisão como "second" e resolve
+    if @step.is_accept_second.nil?
+      @step.update(is_accept_second: decision)
       resolve_truco_decision
     else
-      { error: "Decision already made", status: :unprocessable_entity }
+      { error: "Both decisions already made", status: :unprocessable_entity }
     end
   end
 
@@ -455,15 +472,26 @@ class Gamex2Service
     truco_player = player_data[0]
     truco_team = player_data[1]
 
-if @step.is_accept_second.include?("---no")
-  # Quem chamou o truco foi `truco_team`
-  # Então, se o outro lado recusou, o time que chamou (truco_team) ganha
-  @step.update!(win: truco_team, player_time: truco_player)
-  { message: "Truco rejected, #{truco_team} wins the point. Next turn: #{truco_player}" }
+    if @step.is_accept_second.include?("---no")
+      losing_team = @step.is_accept_second.split("---").last # Extract the team that refused
+      winning_team = losing_team == "NOS" ? "ELES" : "NOS" # Opposite team wins
+      @step.update!(win: winning_team, player_time: truco_player)
+      { message: "Truco rejected, #{truco_team} wins the point. Next turn: #{truco_player}" }
 
-elsif @step.is_accept_second.include?("---yes")
-      if @step.table_cards.any? || [ @step.first_card_origin, @step.second_card_origin, @step.third_card_origin, @step.fourth_card_origin ].any?
-        last_card_origin = [ @step.fourth_card_origin, @step.third_card_origin, @step.second_card_origin, @step.first_card_origin ].compact.first
+    elsif @step.is_accept_second.include?("---yes")
+      if @step.table_cards.any? || [
+        @step.first_card_origin,
+        @step.second_card_origin,
+        @step.third_card_origin,
+        @step.fourth_card_origin
+      ].any?
+        last_card_origin = [
+          @step.fourth_card_origin,
+          @step.third_card_origin,
+          @step.second_card_origin,
+          @step.first_card_origin
+        ].compact.first
+
         if last_card_origin
           last_player_chair = last_card_origin.split("---")[1]
           chair_order = %w[A D B C]
@@ -478,8 +506,8 @@ elsif @step.is_accept_second.include?("---yes")
         @step.update!(player_time: truco_player)
         { message: "Truco accepted, turn remains with #{truco_player}" }
       end
-else
+    else
       { error: "Invalid truco decision state", status: :unprocessable_entity }
-end
+    end
   end
 end
