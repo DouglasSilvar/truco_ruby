@@ -100,6 +100,20 @@ class RoomsController < ApplicationController
     end
   end
 
+  def update_two_player_mode
+    result = RoomService.update_two_player_mode(
+      room_uuid: params[:uuid],
+      player_uuid: request.headers["uuid"],
+      two_player: params[:boolean]
+    )
+
+    if result[:success]
+      render json: { message: result[:message], is_two_players: result[:is_two_players] }, status: :ok
+    else
+      render json: { error: result[:error] }, status: :unprocessable_entity
+    end
+  end
+
   def start_game
     result = RoomService.start_game(
       room_uuid: params[:uuid],

@@ -23,13 +23,44 @@ class Room < ApplicationRecord
 
   # Método para preencher aleatoriamente as cadeiras com o nome do jogador
   def assign_random_chair(player_name)
-    available_chairs = %w[chair_a chair_b chair_c chair_d].select { |chair| self[chair].nil? }
+    # Ordem fixa de ocupação: A -> C -> B -> D
+    sequence = [ "chair_a", "chair_c", "chair_b", "chair_d" ]
 
-    if available_chairs.any?
-      self[available_chairs.sample] = player_name
+    # Obter as cadeiras ocupadas
+    occupied = sequence.select { |chair| self[chair].present? }
+
+    # Verificar quantos estão ocupados para decidir a próxima cadeira na ordem
+    # Exemplo:
+    # 0 ocupados: Próximo deve sentar em A
+    # 1 ocupado  (A): Próximo deve sentar em C
+    # 2 ocupados (A, C): Próximo deve sentar em B
+    # 3 ocupados (A, C, B): Próximo deve sentar em D
+
+    # Primeiro, verificar se a ordem atual de ocupação respeita o prefixo da sequência
+    # Ou seja, se há 1 jogador, ele deve estar em A; se há 2, devem estar em A e C, etc.
+
+    expected_occupied = sequence.first(occupied.size)
+    order_respected = (occupied == expected_occupied)
+
+    # Próxima cadeira esperada caso a ordem esteja sendo respeitada
+    next_chair = sequence[occupied.size] if occupied.size < sequence.size
+
+    # Se a ordem estiver respeitada e ainda há cadeira na sequência para ocupar
+    if order_respected && next_chair && self[next_chair].nil?
+      # Atribuir a próxima cadeira da sequência
+      self[next_chair] = player_name
       save
     else
-      raise "Room is full"
+      # Caso não esteja respeitada ou a cadeira esperada esteja ocupada,
+      # atribui cadeira aleatória como antes
+      available_chairs = %w[chair_a chair_b chair_c chair_d].select { |chair| self[chair].nil? }
+
+      if available_chairs.any?
+        self[available_chairs.sample] = player_name
+        save
+      else
+        raise "Room is full"
+      end
     end
   end
 

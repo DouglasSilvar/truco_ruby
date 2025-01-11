@@ -10,9 +10,15 @@ Rails.application.routes.draw do
   post "rooms/:uuid/ready/:boolean", to: "rooms#update_ready_status"
   post "rooms/:uuid/start", to: "rooms#start_game"
   post "rooms/:uuid/message", to: "rooms#send_message"
+  post "rooms/:uuid/two_player/:boolean", to: "rooms#update_two_player_mode"
 
   resources :games, only: [ :show ], param: :uuid
   post "/games/:uuid/play_move", to: "games#play_move"
   post "/games/:uuid/call", to: "games#call"
   post "/games/:uuid/collect", to: "games#collect"
+
+  resources :gamesx2, only: [ :show ], param: :uuid
+  post "/gamesx2/:uuid/play_move", to: "gamesx2#play_move"
+  post "/gamesx2/:uuid/call", to: "gamesx2#call"
+  post "/gamesx2/:uuid/collect", to: "gamesx2#collect"
 end

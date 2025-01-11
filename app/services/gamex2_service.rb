@@ -1,4 +1,4 @@
-class GameService
+class Gamex2Service
   def initialize(game, player_name)
     @game = game
     @player_name = player_name
@@ -36,7 +36,7 @@ class GameService
     return { error: "Player is not part of this game", status: :forbidden } unless valid_player?
 
     if card
-      return { error: "Cannot play card, table already has 4 cards", status: :forbidden } if @step.table_cards.size >= 4
+      return { error: "Cannot play card, table already has 4 cards", status: :forbidden } if @step.table_cards.size >= 2
 
       unless player_cards.include?(card)
         return { error: "Invalid card or card not in player's hand", status: :unprocessable_entity }
@@ -148,61 +148,90 @@ class GameService
     end
   end
 
-  def set_next_player(chair)
-    chair_order = %w[A D B C]
-    next_chair = chair_order[(chair_order.index(chair[-1].upcase) + 1) % chair_order.length]
+  def set_next_player(current_chair)
+    chair_order = %w[A C]
+
+    # Extrai a letra da cadeira, caso esteja no formato 'chair_a'
+    current_chair = current_chair[-1].upcase if current_chair.start_with?("chair_")
+
+    # Verifica se a cadeira é válida
+    unless chair_order.include?(current_chair)
+      raise "Invalid chair: #{current_chair.inspect}"
+    end
+
+    # Determina a próxima cadeira
+    next_chair = chair_order[(chair_order.index(current_chair) + 1) % chair_order.size]
+
+    # Busca o próximo jogador baseado na cadeira
     next_player_name = @game.room.send("chair_#{next_chair.downcase}")
+
+    # Verifica se o próximo jogador existe
+    unless next_player_name
+      raise "No player assigned to chair: #{next_chair}"
+    end
+
+    # Atualiza o próximo jogador no step
     @step.update!(player_time: next_player_name)
   end
 
   def determine_round_winner
+    Rails.logger.warn("Determining round winner...")
     table_cards = @step.table_cards
     card_origins = [
       @step.first_card_origin,
-      @step.second_card_origin,
-      @step.third_card_origin,
-      @step.fourth_card_origin
+      @step.second_card_origin
     ].compact
-    return if table_cards.size != 4 || card_origins.size != 4
+
+    # Verifica se há cartas suficientes para determinar o vencedor
+    return if table_cards.size != 2 || card_origins.size != 2
+
+    # Calcula o vencedor
     winner_team, strongest_card_origin = calculate_winner(table_cards, card_origins, @step.vira)
+
     if winner_team == "EMPACHE" || strongest_card_origin.nil?
-      if @step.first.nil?
-        @step.update(first: "EMPACHE")
-      elsif @step.second.nil?
-        @step.update(second: "EMPACHE")
-      else
-        @step.update(third: "EMPACHE")
-      end
-
-      if @step.fourth_card_origin
-        current_chair = @step.fourth_card_origin.split("---")[1]
-        current_chair_letter = current_chair[-1].upcase
-        chair_order = %w[A D B C]
-        next_chair = chair_order[(chair_order.index(current_chair_letter) + 1) % chair_order.length]
-        next_player_name = @game.room.send("chair_#{next_chair.downcase}")
-        @step.update(player_time: next_player_name)
-      else
-        raise "Unable to determine next chair"
-      end
-
-      return
-    end
-    if @step.first.nil?
-      @step.update(
-        first: winner_team,
-        player_time: strongest_card_origin&.split("---")&.fetch(3, nil)
-      )
-    elsif @step.second.nil?
-      @step.update(
-        second: winner_team,
-        player_time: strongest_card_origin&.split("---")&.fetch(3, nil)
-      )
+      handle_empache
     else
-      @step.update(
-        third: winner_team,
-        player_time: strongest_card_origin&.split("---")&.fetch(3, nil)
-      )
+      handle_winner(winner_team, strongest_card_origin)
     end
+  end
+
+  private
+
+  def handle_empache
+    if @step.first.nil?
+      @step.update(first: "EMPACHE")
+    elsif @step.second.nil?
+      @step.update(second: "EMPACHE")
+    end
+
+    set_next_player_after_empache
+  end
+
+  def handle_winner(winner_team, strongest_card_origin)
+    if @step.first.nil?
+      @step.update(first: winner_team, player_time: extract_player_from_origin(strongest_card_origin))
+    elsif @step.second.nil?
+      @step.update(second: winner_team, player_time: extract_player_from_origin(strongest_card_origin))
+    else
+      @step.update(third: winner_team, player_time: extract_player_from_origin(strongest_card_origin))
+    end
+  end
+
+  def set_next_player_after_empache
+    last_card_origin = @step.second_card_origin || @step.first_card_origin
+    current_chair = last_card_origin.split("---")[1]
+    next_player_name = determine_next_player(current_chair)
+    @step.update(player_time: next_player_name)
+  end
+
+  def extract_player_from_origin(card_origin)
+    card_origin&.split("---")&.fetch(3, nil)
+  end
+
+  def determine_next_player(current_chair)
+    chair_order = %w[A C]
+    next_chair = chair_order[(chair_order.index(current_chair) + 1) % chair_order.size]
+    @game.room.send("chair_#{next_chair.downcase}")
   end
 
   def calculate_winner(table_cards, card_origins, vira)
@@ -277,7 +306,7 @@ class GameService
 
   def handle_collect(step, player_chair)
     if step.win && step.win != "EMPT"
-      handle_winner(step)
+      handle_winner_single(step)
     else
       step.update(
         table_cards: [],
@@ -290,7 +319,7 @@ class GameService
     end
   end
 
-  def handle_winner(step)
+  def handle_winner_single(step)
     game = step.game
     additional_points = calculate_additional_points(step)
 
@@ -401,25 +430,34 @@ class GameService
   def handle_accept_decision(accept)
     player_chair = find_player_chair
     return { error: "Player is not part of this game", status: :forbidden } unless player_chair
-  
+
+    decision = "#{@player_name}---#{accept ? 'yes' : 'no'}"
+    @step.update(is_accept_first: decision, is_accept_second: decision)
+      resolve_truco_decision
+  end
+
+  def handle_accept_decision(accept)
+    player_chair = find_player_chair
+    return { error: "Player is not part of this game", status: :forbidden } unless player_chair
+
     team = %w[a b].include?(player_chair[-1].downcase) ? "NOS" : "ELES"
     decision = "#{@player_name}---#{accept ? 'yes' : 'no'}---#{team}"
-  
-    if @step.is_accept_first.nil?
-      @step.update(is_accept_first: decision)
-    elsif @step.is_accept_second.nil?
-      existing_player = @step.is_accept_first&.split("---")&.first
-      if existing_player != @player_name
-        @step.update(is_accept_second: decision)
-        resolve_truco_decision
-      else
-        { error: "Player already made a decision", status: :unprocessable_entity }
-      end
+
+    # Verifica se o jogador já tomou uma decisão anteriormente
+    existing_decisions = [ @step.is_accept_first, @step.is_accept_second ].compact
+    if existing_decisions.any? { |d| d.split("---").first == @player_name }
+      return { error: "Player already made a decision", status: :unprocessable_entity }
+    end
+
+    # Salva a decisão como "second" e resolve
+    if @step.is_accept_second.nil?
+      @step.update(is_accept_second: decision)
+      resolve_truco_decision
     else
       { error: "Both decisions already made", status: :unprocessable_entity }
     end
   end
-  
+
   def resolve_truco_decision
     last_truco_call = [
       @step.player_call_3,
@@ -427,19 +465,19 @@ class GameService
       @step.player_call_9,
       @step.player_call_12
     ].compact.first
-  
+
     return { error: "No truco call to resolve", status: :unprocessable_entity } unless last_truco_call
-  
+
     player_data = last_truco_call.split("---")
     truco_player = player_data[0]
     truco_team = player_data[1]
-  
+
     if @step.is_accept_second.include?("---no")
       losing_team = @step.is_accept_second.split("---").last # Extract the team that refused
       winning_team = losing_team == "NOS" ? "ELES" : "NOS" # Opposite team wins
       @step.update!(win: winning_team, player_time: truco_player)
       { message: "Truco rejected, #{truco_team} wins the point. Next turn: #{truco_player}" }
-  
+
     elsif @step.is_accept_second.include?("---yes")
       if @step.table_cards.any? || [
         @step.first_card_origin,
@@ -453,7 +491,7 @@ class GameService
           @step.second_card_origin,
           @step.first_card_origin
         ].compact.first
-  
+
         if last_card_origin
           last_player_chair = last_card_origin.split("---")[1]
           chair_order = %w[A D B C]
@@ -472,5 +510,4 @@ class GameService
       { error: "Invalid truco decision state", status: :unprocessable_entity }
     end
   end
-  
 end
