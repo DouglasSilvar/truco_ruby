@@ -149,7 +149,7 @@ class GameService
   end
 
   def set_next_player(chair)
-    chair_order = %w[A D B C]
+    chair_order = %w[A D B C A D B C]
     next_chair = chair_order[(chair_order.index(chair[-1].upcase) + 1) % chair_order.length]
     next_player_name = @game.room.send("chair_#{next_chair.downcase}")
     @step.update!(player_time: next_player_name)
@@ -177,7 +177,7 @@ class GameService
       if @step.fourth_card_origin
         current_chair = @step.fourth_card_origin.split("---")[1]
         current_chair_letter = current_chair[-1].upcase
-        chair_order = %w[A D B C]
+        chair_order = %w[A D B C A D B C]
         next_chair = chair_order[(chair_order.index(current_chair_letter) + 1) % chair_order.length]
         next_player_name = @game.room.send("chair_#{next_chair.downcase}")
         @step.update(player_time: next_player_name)
@@ -456,7 +456,7 @@ class GameService
   
         if last_card_origin
           last_player_chair = last_card_origin.split("---")[1]
-          chair_order = %w[A D B C]
+          chair_order = %w[A D B C A D B C]
           next_chair = chair_order[(chair_order.index(last_player_chair[-1].upcase) + 1) % chair_order.length]
           next_player_name = @game.room.send("chair_#{next_chair.downcase}")
           @step.update!(player_time: next_player_name)
