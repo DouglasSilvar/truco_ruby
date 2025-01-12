@@ -149,7 +149,7 @@ class Gamex2Service
   end
 
   def set_next_player(current_chair)
-    chair_order = %w[A C]
+    chair_order = %w[A C A C]
 
     # Extrai a letra da cadeira, caso esteja no formato 'chair_a'
     current_chair = current_chair[-1].upcase if current_chair.start_with?("chair_")
@@ -175,7 +175,6 @@ class Gamex2Service
   end
 
   def determine_round_winner
-    Rails.logger.warn("Determining round winner...")
     table_cards = @step.table_cards
     card_origins = [
       @step.first_card_origin,
@@ -229,7 +228,7 @@ class Gamex2Service
   end
 
   def determine_next_player(current_chair)
-    chair_order = %w[A C]
+    chair_order = %w[A C A C]
     next_chair = chair_order[(chair_order.index(current_chair) + 1) % chair_order.size]
     @game.room.send("chair_#{next_chair.downcase}")
   end
@@ -431,15 +430,6 @@ class Gamex2Service
     player_chair = find_player_chair
     return { error: "Player is not part of this game", status: :forbidden } unless player_chair
 
-    decision = "#{@player_name}---#{accept ? 'yes' : 'no'}"
-    @step.update(is_accept_first: decision, is_accept_second: decision)
-      resolve_truco_decision
-  end
-
-  def handle_accept_decision(accept)
-    player_chair = find_player_chair
-    return { error: "Player is not part of this game", status: :forbidden } unless player_chair
-
     team = %w[a b].include?(player_chair[-1].downcase) ? "NOS" : "ELES"
     decision = "#{@player_name}---#{accept ? 'yes' : 'no'}---#{team}"
 
@@ -494,7 +484,7 @@ class Gamex2Service
 
         if last_card_origin
           last_player_chair = last_card_origin.split("---")[1]
-          chair_order = %w[A D B C]
+          chair_order = %w[A C A C]
           next_chair = chair_order[(chair_order.index(last_player_chair[-1].upcase) + 1) % chair_order.length]
           next_player_name = @game.room.send("chair_#{next_chair.downcase}")
           @step.update!(player_time: next_player_name)
