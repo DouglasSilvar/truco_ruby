@@ -133,9 +133,9 @@ class RoomService
   def self.leave_room(room_uuid:, player_uuid:)
     room = Room.find_by(uuid: room_uuid)
     player = Player.find_by(uuid: player_uuid)
-  
+
     return { success: false, error: "Room or Player not found" } unless room && player
-  
+
     if room.players.exists?(player.id)
       if room.owner == player
         # Remove todos os jogadores da sala antes de destruir
@@ -159,7 +159,7 @@ class RoomService
       { success: false, error: "Player is not in the room" }
     end
   end
-  
+
 
   def self.change_chair(room_uuid:, player_name:, chair_destination:)
     room = Room.find_by(uuid: room_uuid)
@@ -276,7 +276,8 @@ class RoomService
       cards_chair_d: cards_chair_d,
       table_cards: [],
       vira: vira,
-      player_time: room.chair_a
+      player_time: room.chair_a,
+      player_foot: room.chair_a
     )
 
     if step.save

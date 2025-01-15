@@ -335,6 +335,23 @@ class GameService
   end
 
   def reset_step(step, deck)
+    chair_order = %w[A D B C A D B C]
+
+    # Obtém a sala associada ao jogo
+    room = step.game.room
+
+    # Identifica a cadeira atual com base no player_foot
+    current_player = step.player_foot
+    current_chair = room.attributes.find { |chair, player| player == current_player }&.first&.split("chair_")&.last&.upcase
+
+    raise "Cadeira atual não encontrada para o jogador #{current_player}" unless current_chair
+
+    # Determina a próxima cadeira na ordem
+    next_chair = chair_order[(chair_order.index(current_chair) + 1) % chair_order.length]
+
+    # Determina o próximo jogador com base na próxima cadeira
+    next_player_name = room.send("chair_#{next_chair.downcase}")
+
     step.update(
       cards_chair_a: deck&.shift(3),
       cards_chair_b: deck&.shift(3),
@@ -355,9 +372,12 @@ class GameService
       player_call_12: nil,
       is_accept_first: nil,
       is_accept_second: nil,
-      win: nil
+      win: nil,
+      player_time: next_player_name,
+      player_foot: next_player_name
     )
   end
+
   def calculate_additional_points(step)
     case
     when step.player_call_12.present?
@@ -401,12 +421,13 @@ class GameService
   def handle_accept_decision(accept)
     player_chair = find_player_chair
     return { error: "Player is not part of this game", status: :forbidden } unless player_chair
-  
+
     team = %w[a b].include?(player_chair[-1].downcase) ? "NOS" : "ELES"
     decision = "#{@player_name}---#{accept ? 'yes' : 'no'}---#{team}"
-  
+
     if @step.is_accept_first.nil?
       @step.update(is_accept_first: decision)
+      { message: "First decision recorded: #{decision}" }
     elsif @step.is_accept_second.nil?
       existing_player = @step.is_accept_first&.split("---")&.first
       if existing_player != @player_name
@@ -419,7 +440,7 @@ class GameService
       { error: "Both decisions already made", status: :unprocessable_entity }
     end
   end
-  
+
   def resolve_truco_decision
     last_truco_call = [
       @step.player_call_3,
@@ -427,19 +448,19 @@ class GameService
       @step.player_call_9,
       @step.player_call_12
     ].compact.first
-  
+
     return { error: "No truco call to resolve", status: :unprocessable_entity } unless last_truco_call
-  
+
     player_data = last_truco_call.split("---")
     truco_player = player_data[0]
     truco_team = player_data[1]
-  
+
     if @step.is_accept_second.include?("---no")
       losing_team = @step.is_accept_second.split("---").last # Extract the team that refused
       winning_team = losing_team == "NOS" ? "ELES" : "NOS" # Opposite team wins
       @step.update!(win: winning_team, player_time: truco_player)
       { message: "Truco rejected, #{truco_team} wins the point. Next turn: #{truco_player}" }
-  
+
     elsif @step.is_accept_second.include?("---yes")
       if @step.table_cards.any? || [
         @step.first_card_origin,
@@ -453,7 +474,7 @@ class GameService
           @step.second_card_origin,
           @step.first_card_origin
         ].compact.first
-  
+
         if last_card_origin
           last_player_chair = last_card_origin.split("---")[1]
           chair_order = %w[A D B C A D B C]
@@ -472,5 +493,4 @@ class GameService
       { error: "Invalid truco decision state", status: :unprocessable_entity }
     end
   end
-  
 end

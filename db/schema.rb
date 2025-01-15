@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2024_12_18_162419) do
+ActiveRecord::Schema[7.2].define(version: 2025_01_14_232552) do
   create_table "chats", force: :cascade do |t|
     t.string "room_id", null: false
     t.datetime "created_at", null: false
@@ -102,6 +102,7 @@ ActiveRecord::Schema[7.2].define(version: 2024_12_18_162419) do
     t.string "third"
     t.string "is_accept_first"
     t.string "is_accept_second"
+    t.string "player_foot"
     t.index ["game_id"], name: "index_steps_on_game_id"
   end
 
