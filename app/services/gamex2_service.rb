@@ -363,6 +363,23 @@ class Gamex2Service
   end
 
   def reset_step(step, deck)
+    chair_order = %w[A C A C]
+
+    # Obtém a sala associada ao jogo
+    room = step.game.room
+
+    # Identifica a cadeira atual com base no player_foot
+    current_player = step.player_foot
+    current_chair = room.attributes.find { |chair, player| player == current_player }&.first&.split("chair_")&.last&.upcase
+
+    raise "Cadeira atual não encontrada para o jogador #{current_player}" unless current_chair
+
+    # Determina a próxima cadeira na ordem
+    next_chair = chair_order[(chair_order.index(current_chair) + 1) % chair_order.length]
+
+    # Determina o próximo jogador com base na próxima cadeira
+    next_player_name = room.send("chair_#{next_chair.downcase}")
+
     step.update(
       cards_chair_a: deck&.shift(3),
       cards_chair_b: deck&.shift(3),
@@ -383,7 +400,9 @@ class Gamex2Service
       player_call_12: nil,
       is_accept_first: nil,
       is_accept_second: nil,
-      win: nil
+      win: nil,
+      player_time: next_player_name,
+      player_foot: next_player_name
     )
   end
   def calculate_additional_points(step)
