@@ -218,7 +218,7 @@ class Gamex2Service
 
   def set_next_player_after_empache
     last_card_origin = @step.second_card_origin || @step.first_card_origin
-    current_chair = last_card_origin.split("---")[1]
+    current_chair = last_card_origin.split("---")[1].gsub("chair_", "").upcase
     next_player_name = determine_next_player(current_chair)
     @step.update(player_time: next_player_name)
   end
