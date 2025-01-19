@@ -1,6 +1,6 @@
 class Gamesx2Controller < ApplicationController
-  before_action :authenticate_player, only: [ :show, :play_move ]
-  before_action :set_game, only: [ :show, :play_move, :call, :collect ]
+  before_action :authenticate_player, only: [ :show, :play_move, :escape ]
+  before_action :set_game, only: [ :show, :play_move, :call, :collect, :escape ]
 
   def show
     player_name = request.headers["name"]
@@ -40,6 +40,19 @@ def call
     render json: { error: result[:error] }, status: result[:status]
   else
     render json: result[:message], status: :ok
+  end
+end
+
+def escape
+  player_name = request.headers["name"]
+
+  service = Gamex2Service.new(@game, player_name)
+  result = service.escape
+
+  if result[:error]
+    render json: { error: result[:error] }, status: result[:status]
+  else
+    render json: { message: "Player #{player_name} has surrendered successfully." }, status: :ok
   end
 end
 

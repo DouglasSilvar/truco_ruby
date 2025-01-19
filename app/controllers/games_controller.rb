@@ -44,6 +44,19 @@ def call
   end
 end
 
+def escape
+  player_name = request.headers["name"]
+
+  service = GameService.new(@game, player_name)
+  result = service.escape
+
+  if result[:error]
+    render json: { error: result[:error] }, status: result[:status]
+  else
+    render json: { message: "Player #{player_name} has surrendered successfully." }, status: :ok
+  end
+end
+
   def collect
     collect = ActiveModel::Type::Boolean.new.cast(params[:collect])
     player_name = request.headers["name"]
