@@ -57,6 +57,28 @@ class GameService
     handle_collect(@step, player_chair)
   end
 
+  def escape
+    # Identifica a cadeira do jogador
+    player_chair = find_player_chair
+
+    # Verifica se o jogador pertence ao jogo e está em uma das cadeiras válidas
+    unless %w[chair_a chair_c].include?(player_chair)
+      return { error: "Player not in a valid chair (A or C)", status: :forbidden }
+    end
+
+    # Determina o time do jogador com base na cadeira
+    player_team = player_chair == "chair_a" ? "NOS" : "ELES"
+
+    # Determina o time oposto
+    winning_team = player_team == "NOS" ? "ELES" : "NOS"
+
+    # Atualiza o step com a vitória do time oposto
+    @step.update!(win: winning_team)
+
+    # Retorna a resposta
+    { message: "Player #{@player_name} surrendered. #{winning_team} wins the round." }
+  end
+
   def handle_call(call_value, accept)
     if call_value
       handle_truco_call(call_value)
