@@ -107,8 +107,29 @@ class GameService
   def format_step_data(step, player_chair)
     step_data = step.as_json
 
+    # Verifica se algum dos times está na mão de 11 e aplica a lógica necessária
+    if @game.score_us == 11 || @game.score_them == 11
+      team_with_11 = @game.score_us == 11 ? "NOS" : "ELES"
+      player_team = %w[a b].include?(player_chair[-1].downcase) ? "NOS" : "ELES"
+
+      if player_team == team_with_11
+        case player_chair
+        when "chair_a"
+          step_data["handler_11"] = step.cards_chair_b if player_team == "NOS"
+        when "chair_b"
+          step_data["handler_11"] = step.cards_chair_a if player_team == "NOS"
+        when "chair_c"
+          step_data["handler_11"] = step.cards_chair_d if player_team == "ELES"
+        when "chair_d"
+          step_data["handler_11"] = step.cards_chair_c if player_team == "ELES"
+        end
+      else
+        step_data["handler_11"] = []
+      end
+    end
+
+    # Regra padrão: mostra apenas as cartas do jogador
     if player_chair
-      # Jogador: mostra apenas suas cartas
       %w[cards_chair_a cards_chair_b cards_chair_c cards_chair_d].each do |chair|
         step_data[chair] = (chair == "cards_#{player_chair}") ? step.send(chair) : []
       end
