@@ -57,6 +57,32 @@ class GameService
     handle_collect(@step, player_chair)
   end
 
+  def handle_11_decision(accept_boolean)
+    player_chair = find_player_chair
+    return { error: "Player not found in the room", status: :not_found } unless player_chair
+
+    # Determina o time do jogador (NOS ou ELES)
+    team = determine_player_team(player_chair)
+
+    # Forma a string no formato "chair_a---NOS---chromes---TRUE" ou "chair_a---NOS---chromes---FALSE"
+    decision_string = "#{player_chair}---#{team}---#{@player_name}---#{accept_boolean}"
+
+    # Verifica se o jogador já tomou uma decisão
+    if player_has_already_decided?(@step, @player_name)
+      return { error: "Player has already made a decision", status: :unprocessable_entity }
+    end
+
+    # Persiste a decisão na coluna correta
+    persist_11_decision(@step, decision_string)
+
+    # Se a segunda decisão foi persistida, verifica se é false para definir o vencedor
+    if @step.handle_11_accept_second.present?
+      resolve_11_decision
+    else
+      { message: "Decision recorded successfully" }
+    end
+  end
+
   def escape
     # Identifica a cadeira do jogador
     player_chair = find_player_chair
@@ -101,6 +127,33 @@ class GameService
   # Busca o último step do jogo
   def latest_step
     @game.steps.order(:number).last
+  end
+
+  def determine_player_team(chair)
+    case chair
+    when "chair_a", "chair_b"
+      "NOS"
+    when "chair_c", "chair_d"
+      "ELES"
+    else
+      "UNKNOWN"
+    end
+  end
+
+  # Verifica se o jogador já tomou uma decisão
+  def player_has_already_decided?(step, player_name)
+    step.handle_11_accept_first&.include?(player_name) || step.handle_11_accept_second&.include?(player_name)
+  end
+
+  # Persiste a decisão na coluna correta (handle_11_accept_first ou handle_11_accept_second)
+  def persist_11_decision(step, decision_string)
+    if step.handle_11_accept_first.blank?
+      step.update(handle_11_accept_first: decision_string)
+    elsif step.handle_11_accept_second.blank?
+      step.update(handle_11_accept_second: decision_string)
+    else
+      { error: "Both decision columns are already filled", status: :unprocessable_entity }
+    end
   end
 
   # Formata os dados do step dependendo do jogador ou telespectador
@@ -285,6 +338,38 @@ class GameService
     [ winning_team, "#{strongest_card[:card]}---#{strongest_card[:chair]}---#{strongest_card[:team]}---#{strongest_card[:player_name]}" ]
   end
 
+  def resolve_11_decision
+    # Extrai a decisão do segundo jogador
+    second_decision = @step.handle_11_accept_second
+    decision_parts = second_decision.split("---")
+    Rails.logger.warn("Decision parts: #{decision_parts}")
+    # Verifica se a string foi dividida corretamente
+    if decision_parts.size < 4
+      return { error: "Invalid decision format in handle_11_accept_second", status: :unprocessable_entity }
+    end
+  
+    decision_boolean = decision_parts[3] == "true" # Extrai o booleano (true/false)
+    losing_team = decision_parts[1] # Extrai o time do segundo jogador (NOS ou ELES)
+  
+    if decision_boolean == false
+      # Se a decisão for false, o time oposto (que foge) ganha
+      winning_team = losing_team == "NOS" ? "ELES" : "NOS" # Time oposto (que foge)
+  
+      # Define o próximo jogador (player_time) com base na ordem das cadeiras
+      current_chair = decision_parts[0] # Cadeira do segundo jogador
+      chair_order = %w[A D B C A D B C]
+      next_chair = chair_order[(chair_order.index(current_chair[-1].upcase) + 1) % chair_order.length]
+      next_player_name = @game.room.send("chair_#{next_chair.downcase}")
+  
+      @step.update!(win: winning_team, player_time: next_player_name)
+  
+      { message: "Decision rejected, #{winning_team} wins the round. Next turn: #{next_player_name}" }
+    else
+      # Se a decisão for true, o jogo segue normalmente
+      { message: "Decision accepted, the game continues" }
+    end
+  end
+
   def calculate_card_strength(card, mania_card, hierarchy, chair)
     # Hierarquia básica de força
     return 0 if card == "EC"
@@ -327,6 +412,8 @@ class GameService
         first_card_origin: nil,
         second_card_origin: nil,
         third_card_origin: nil,
+        handle_11_accept_second: nil,
+        handle_11_accept_first: nil,
         fourth_card_origin: nil
       )
       { message: "Cards cleared" }
@@ -370,7 +457,10 @@ class GameService
       second_card_origin: nil,
       third_card_origin: nil,
       fourth_card_origin: nil,
+      handle_11_accept_second: nil,
+      handle_11_accept_first: nil,
       win: nil
+
     )
     game.room.update(game: nil)
     game.room.room_players.update_all(ready: false)
@@ -415,6 +505,8 @@ class GameService
       player_call_12: nil,
       is_accept_first: nil,
       is_accept_second: nil,
+      handle_11_accept_second: nil,
+      handle_11_accept_first: nil,
       win: nil,
       player_time: next_player_name,
       player_foot: next_player_name

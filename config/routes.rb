@@ -17,10 +17,12 @@ Rails.application.routes.draw do
   post "/games/:uuid/call", to: "games#call"
   post "/games/:uuid/collect", to: "games#collect"
   post "/games/:uuid/escape", to: "games#escape"
+  post "/games/:uuid/accept/:boolean", to: "games#accept"
 
   resources :gamesx2, only: [ :show ], param: :uuid
   post "/gamesx2/:uuid/play_move", to: "gamesx2#play_move"
   post "/gamesx2/:uuid/call", to: "gamesx2#call"
   post "/gamesx2/:uuid/collect", to: "gamesx2#collect"
   post "/gamesx2/:uuid/escape", to: "gamesx2#escape"
+  post "/gamesx2/:uuid/accept/:boolean", to: "gamesx#accept"
 end
