@@ -57,32 +57,6 @@ class GameService
     handle_collect(@step, player_chair)
   end
 
-  def handle_11_decision(accept_boolean)
-    player_chair = find_player_chair
-    return { error: "Player not found in the room", status: :not_found } unless player_chair
-
-    # Determina o time do jogador (NOS ou ELES)
-    team = determine_player_team(player_chair)
-
-    # Forma a string no formato "chair_a---NOS---chromes---TRUE" ou "chair_a---NOS---chromes---FALSE"
-    decision_string = "#{player_chair}---#{team}---#{@player_name}---#{accept_boolean}"
-
-    # Verifica se o jogador já tomou uma decisão
-    if player_has_already_decided?(@step, @player_name)
-      return { error: "Player has already made a decision", status: :unprocessable_entity }
-    end
-
-    # Persiste a decisão na coluna correta
-    persist_11_decision(@step, decision_string)
-
-    # Se a segunda decisão foi persistida, verifica se é false para definir o vencedor
-    if @step.handle_11_accept_second.present?
-      resolve_11_decision
-    else
-      { message: "Decision recorded successfully" }
-    end
-  end
-
   def escape
     # Identifica a cadeira do jogador
     player_chair = find_player_chair
@@ -137,22 +111,6 @@ class GameService
       "ELES"
     else
       "UNKNOWN"
-    end
-  end
-
-  # Verifica se o jogador já tomou uma decisão
-  def player_has_already_decided?(step, player_name)
-    step.handle_11_accept_first&.include?(player_name) || step.handle_11_accept_second&.include?(player_name)
-  end
-
-  # Persiste a decisão na coluna correta (handle_11_accept_first ou handle_11_accept_second)
-  def persist_11_decision(step, decision_string)
-    if step.handle_11_accept_first.blank?
-      step.update(handle_11_accept_first: decision_string)
-    elsif step.handle_11_accept_second.blank?
-      step.update(handle_11_accept_second: decision_string)
-    else
-      { error: "Both decision columns are already filled", status: :unprocessable_entity }
     end
   end
 
