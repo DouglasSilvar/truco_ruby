@@ -103,44 +103,12 @@ class GameService
     @game.steps.order(:number).last
   end
 
-  def determine_player_team(chair)
-    case chair
-    when "chair_a", "chair_b"
-      "NOS"
-    when "chair_c", "chair_d"
-      "ELES"
-    else
-      "UNKNOWN"
-    end
-  end
-
   # Formata os dados do step dependendo do jogador ou telespectador
   def format_step_data(step, player_chair)
     step_data = step.as_json
 
-    # Verifica se algum dos times está na mão de 11 e aplica a lógica necessária
-    if @game.score_us == 11 || @game.score_them == 11
-      team_with_11 = @game.score_us == 11 ? "NOS" : "ELES"
-      player_team = %w[a b].include?(player_chair[-1].downcase) ? "NOS" : "ELES"
-
-      if player_team == team_with_11
-        case player_chair
-        when "chair_a"
-          step_data["handler_11"] = step.cards_chair_b if player_team == "NOS"
-        when "chair_b"
-          step_data["handler_11"] = step.cards_chair_a if player_team == "NOS"
-        when "chair_c"
-          step_data["handler_11"] = step.cards_chair_d if player_team == "ELES"
-        when "chair_d"
-          step_data["handler_11"] = step.cards_chair_c if player_team == "ELES"
-        end
-      else
-        step_data["handler_11"] = []
-      end
-    end
-
-    # Regra padrão: mostra apenas as cartas do jogador
     if player_chair
+      # Jogador: mostra apenas suas cartas
       %w[cards_chair_a cards_chair_b cards_chair_c cards_chair_d].each do |chair|
         step_data[chair] = (chair == "cards_#{player_chair}") ? step.send(chair) : []
       end
@@ -296,38 +264,6 @@ class GameService
     [ winning_team, "#{strongest_card[:card]}---#{strongest_card[:chair]}---#{strongest_card[:team]}---#{strongest_card[:player_name]}" ]
   end
 
-  def resolve_11_decision
-    # Extrai a decisão do segundo jogador
-    second_decision = @step.handle_11_accept_second
-    decision_parts = second_decision.split("---")
-    Rails.logger.warn("Decision parts: #{decision_parts}")
-    # Verifica se a string foi dividida corretamente
-    if decision_parts.size < 4
-      return { error: "Invalid decision format in handle_11_accept_second", status: :unprocessable_entity }
-    end
-  
-    decision_boolean = decision_parts[3] == "true" # Extrai o booleano (true/false)
-    losing_team = decision_parts[1] # Extrai o time do segundo jogador (NOS ou ELES)
-  
-    if decision_boolean == false
-      # Se a decisão for false, o time oposto (que foge) ganha
-      winning_team = losing_team == "NOS" ? "ELES" : "NOS" # Time oposto (que foge)
-  
-      # Define o próximo jogador (player_time) com base na ordem das cadeiras
-      current_chair = decision_parts[0] # Cadeira do segundo jogador
-      chair_order = %w[A D B C A D B C]
-      next_chair = chair_order[(chair_order.index(current_chair[-1].upcase) + 1) % chair_order.length]
-      next_player_name = @game.room.send("chair_#{next_chair.downcase}")
-  
-      @step.update!(win: winning_team, player_time: next_player_name)
-  
-      { message: "Decision rejected, #{winning_team} wins the round. Next turn: #{next_player_name}" }
-    else
-      # Se a decisão for true, o jogo segue normalmente
-      { message: "Decision accepted, the game continues" }
-    end
-  end
-
   def calculate_card_strength(card, mania_card, hierarchy, chair)
     # Hierarquia básica de força
     return 0 if card == "EC"
@@ -370,8 +306,6 @@ class GameService
         first_card_origin: nil,
         second_card_origin: nil,
         third_card_origin: nil,
-        handle_11_accept_second: nil,
-        handle_11_accept_first: nil,
         fourth_card_origin: nil
       )
       { message: "Cards cleared" }
@@ -415,10 +349,7 @@ class GameService
       second_card_origin: nil,
       third_card_origin: nil,
       fourth_card_origin: nil,
-      handle_11_accept_second: nil,
-      handle_11_accept_first: nil,
       win: nil
-
     )
     game.room.update(game: nil)
     game.room.room_players.update_all(ready: false)
@@ -463,8 +394,6 @@ class GameService
       player_call_12: nil,
       is_accept_first: nil,
       is_accept_second: nil,
-      handle_11_accept_second: nil,
-      handle_11_accept_first: nil,
       win: nil,
       player_time: next_player_name,
       player_foot: next_player_name

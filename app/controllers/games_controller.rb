@@ -1,6 +1,6 @@
 class GamesController < ApplicationController
   before_action :authenticate_player, only: [ :show, :play_move ]
-  before_action :set_game, only: [:show, :play_move, :call, :collect, :accept]
+  before_action :set_game, only: [ :show, :play_move, :call, :collect ]
 
   def show
     player_name = request.headers["name"]
@@ -56,21 +56,6 @@ def escape
     render json: { message: "Player #{player_name} has surrendered successfully." }, status: :ok
   end
 end
-
-def accept
-  accept_boolean = ActiveModel::Type::Boolean.new.cast(params[:boolean])
-  player_name = request.headers["name"]
-
-  service = GameService.new(@game, player_name)
-  result = service.handle_11_decision(accept_boolean) # Novo método
-
-  if result[:error]
-    render json: { error: result[:error] }, status: result[:status]
-  else
-    render json: { message: result[:message] }, status: :ok
-  end
-end
-
 
   def collect
     collect = ActiveModel::Type::Boolean.new.cast(params[:collect])
