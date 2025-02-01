@@ -1,6 +1,6 @@
 class GamesController < ApplicationController
   before_action :authenticate_player, only: [ :show, :play_move ]
-  before_action :set_game, only: [ :show, :play_move, :call, :collect ]
+  before_action :set_game, only: [ :show, :play_move, :call, :collect, :escape]
 
   def show
     player_name = request.headers["name"]
@@ -46,9 +46,8 @@ end
 
 def escape
   player_name = request.headers["name"]
-
   service = GameService.new(@game, player_name)
-  result = service.escape
+  result = service.escape_play
 
   if result[:error]
     render json: { error: result[:error] }, status: result[:status]
