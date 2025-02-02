@@ -35,16 +35,16 @@ class GameService
   def play_move(card, coverup)
     return { error: "Player is not part of this game", status: :forbidden } unless valid_player?
 
-    if card
-      return { error: "Cannot play card, table already has 4 cards", status: :forbidden } if @step.table_cards.size >= 4
+    # Se a mesa já tem 4 cartas, não pode jogar mais
+    return { error: "Cannot play card, table already has 4 cards", status: :forbidden } if @step.table_cards.size >= 4
 
-      unless player_cards.include?(card)
-        return { error: "Invalid card or card not in player's hand", status: :unprocessable_entity }
-      end
-
-      play_card(card, coverup)
+    # Se a carta não estiver na mão do jogador, erro
+    if card == "??"
+      card = choose_random_player_card
+      return { error: "No valid opponent card to play", status: :unprocessable_entity } unless card
     end
 
+    play_card(card, coverup)
     {}
   end
 
@@ -103,44 +103,63 @@ class GameService
     @game.steps.order(:number).last
   end
 
-  # Formata os dados do step dependendo do jogador ou telespectador
-  def format_step_data(step, player_chair)
-    step_data = step.as_json
-  
-    if player_chair
-      # Jogador: mostra apenas suas cartas
-      %w[cards_chair_a cards_chair_b cards_chair_c cards_chair_d].each do |chair|
-        step_data[chair] = (chair == "cards_#{player_chair}") ? step.send(chair) : []
-      end
-  
-      # Novo: se o time do jogador estiver com 11 pontos (e o outro time NÃO estiver com 11),
-      # adiciona as cartas do parceiro
-      team = %w[chair_a chair_b].include?(player_chair) ? "NOS" : "ELES"
-      if team == "NOS" && @game.score_us == 11 && @game.score_them != 11
-        partner_chair = player_chair == "chair_a" ? "chair_b" : "chair_a"
-        step_data["partner_cards"] = step.send("cards_#{partner_chair}")
-      elsif team == "ELES" && @game.score_them == 11 && @game.score_us != 11
-        partner_chair = player_chair == "chair_c" ? "chair_d" : "chair_c"
-        step_data["partner_cards"] = step.send("cards_#{partner_chair}")
-      end
-  
-    else
-      # Telespectador: remove os arrays de cartas
-      %w[cards_chair_a cards_chair_b cards_chair_c cards_chair_d].each do |chair|
-        step_data.delete(chair)
+# Formata os dados do step dependendo do jogador ou telespectador
+def format_step_data(step, player_chair)
+  step_data = step.as_json
+
+  # Se ambos os times estiverem com 11 pontos, apenas o jogador da requisição vê suas cartas como "??"
+  if @game.score_us == 11 && @game.score_them == 11
+    %w[cards_chair_a cards_chair_b cards_chair_c cards_chair_d].each do |chair|
+      if chair == "cards_#{player_chair}"
+        original_size = step.send(chair).size # Obtém a quantidade real de cartas do jogador
+        step_data[chair] = Array.new(original_size, "??") # Substitui pelas cartas ocultas
+      else
+        step_data[chair] = [] # Deixa vazio para os outros jogadores
       end
     end
-  
-    step_data
+    return step_data
   end
-  
+
+  if player_chair
+    # Jogador: mostra apenas suas cartas
+    %w[cards_chair_a cards_chair_b cards_chair_c cards_chair_d].each do |chair|
+      step_data[chair] = (chair == "cards_#{player_chair}") ? step.send(chair) : []
+    end
+
+    # Novo: se o time do jogador estiver com 11 pontos (e o outro time NÃO estiver com 11),
+    # adiciona as cartas do parceiro
+    team = %w[chair_a chair_b].include?(player_chair) ? "NOS" : "ELES"
+    if team == "NOS" && @game.score_us == 11 && @game.score_them != 11
+      partner_chair = player_chair == "chair_a" ? "chair_b" : "chair_a"
+      step_data["partner_cards"] = step.send("cards_#{partner_chair}")
+    elsif team == "ELES" && @game.score_them == 11 && @game.score_us != 11
+      partner_chair = player_chair == "chair_c" ? "chair_d" : "chair_c"
+      step_data["partner_cards"] = step.send("cards_#{partner_chair}")
+    end
+  else
+    # Telespectador: remove os arrays de cartas
+    %w[cards_chair_a cards_chair_b cards_chair_c cards_chair_d].each do |chair|
+      step_data.delete(chair)
+    end
+  end
+
+  step_data
+end
+
+
 
   # Determina o step atual
   def current_step
     return nil if @game.nil?
     Step.where(game_id: @game.uuid).order(number: :desc).first
   end
-  
+
+  def choose_random_player_card
+    player_cards = player_cards()
+    return nil if player_cards.empty?
+
+    player_cards.sample # Escolhe uma carta aleatória do próprio jogador
+  end
 
   # Verifica se o jogador é válido
   def valid_player?
@@ -417,6 +436,9 @@ class GameService
 
   def calculate_additional_points(step)
     game = step.game
+    if game.score_us == 11 && game.score_them == 11
+      return 1
+    end
     if game.score_us == 11 || game.score_them == 11
       # Na mão de 11, se o time aceitar jogar (is_accept_second com 'yes'), a vitória (ou derrota) rende 3 pontos para a equipe vencedora;
       # se não aceitar (is_accept_second com 'no'), a equipe adversária ganha 1 ponto.
@@ -442,7 +464,7 @@ class GameService
       end
     end
   end
-  
+
 
   def handle_truco_call(call_value)
     valid_calls = [ 3, 6, 9, 12 ]
@@ -499,8 +521,8 @@ class GameService
         @step.update!(win: winning_team)
         return { message: "Mão de 11 rejected, #{winning_team} wins the round (3 points)." }
       elsif @step.is_accept_second.include?("---yes")
-        if @step.table_cards.any? || [@step.first_card_origin, @step.second_card_origin, @step.third_card_origin, @step.fourth_card_origin].any?
-          last_card_origin = [@step.fourth_card_origin, @step.third_card_origin, @step.second_card_origin, @step.first_card_origin].compact.first
+        if @step.table_cards.any? || [ @step.first_card_origin, @step.second_card_origin, @step.third_card_origin, @step.fourth_card_origin ].any?
+          last_card_origin = [ @step.fourth_card_origin, @step.third_card_origin, @step.second_card_origin, @step.first_card_origin ].compact.first
           if last_card_origin
             last_player_chair = last_card_origin.split("---")[1]
             chair_order = %w[A D B C A D B C]
@@ -519,22 +541,22 @@ class GameService
         return { error: "Invalid mão de 11 decision state", status: :unprocessable_entity }
       end
     end
-  
-    last_truco_call = [@step.player_call_3, @step.player_call_6, @step.player_call_9, @step.player_call_12].compact.first
+
+    last_truco_call = [ @step.player_call_3, @step.player_call_6, @step.player_call_9, @step.player_call_12 ].compact.first
     return { error: "No truco call to resolve", status: :unprocessable_entity } unless last_truco_call
-  
+
     player_data = last_truco_call.split("---")
     truco_player = player_data[0]
     truco_team = player_data[1]
-  
+
     if @step.is_accept_second.include?("---no")
       losing_team = @step.is_accept_second.split("---").last
       winning_team = losing_team == "NOS" ? "ELES" : "NOS"
       @step.update!(win: winning_team, player_time: truco_player)
       { message: "Truco rejected, #{truco_team} wins the point. Next turn: #{truco_player}" }
     elsif @step.is_accept_second.include?("---yes")
-      if @step.table_cards.any? || [@step.first_card_origin, @step.second_card_origin, @step.third_card_origin, @step.fourth_card_origin].any?
-        last_card_origin = [@step.fourth_card_origin, @step.third_card_origin, @step.second_card_origin, @step.first_card_origin].compact.first
+      if @step.table_cards.any? || [ @step.first_card_origin, @step.second_card_origin, @step.third_card_origin, @step.fourth_card_origin ].any?
+        last_card_origin = [ @step.fourth_card_origin, @step.third_card_origin, @step.second_card_origin, @step.first_card_origin ].compact.first
         if last_card_origin
           last_player_chair = last_card_origin.split("---")[1]
           chair_order = %w[A D B C A D B C]
@@ -553,5 +575,4 @@ class GameService
       { error: "Invalid truco decision state", status: :unprocessable_entity }
     end
   end
-  
 end
